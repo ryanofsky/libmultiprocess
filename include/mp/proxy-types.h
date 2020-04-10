@@ -1374,6 +1374,14 @@ void clientInvoke(ProxyClient& proxy_client, const GetRequest& get_request, Fiel
     if (!g_thread_context.waiter) {
         assert(g_thread_context.thread_name.empty());
         g_thread_context.thread_name = ThreadName(proxy_client.m_connection->m_loop.m_exe_name);
+        // If next assert triggers, it means clientInvoke is being called from
+        // the capnp event loop thread. This can happen in a ProxyServer method
+        // implementation that calls back into the client, if the server method
+        // is implemented synchronously to execute into the event loop thread
+        // instead of asynchronously to run in a dedicated thread. Any server
+        // method that calls a client method or blocks in general needs to run
+        // off the event thread. This can be done by adding a 'context
+        // :Proxy.Context' input argument to the capnp method declaration.
         assert(!g_thread_context.loop_thread);
         g_thread_context.waiter = std::make_unique<Waiter>();
         proxy_client.m_connection->m_loop.logPlain()
