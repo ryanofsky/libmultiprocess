@@ -1516,6 +1516,7 @@ void serverDestroy(Server& server)
     server.m_context.connection->m_loop.log() << "IPC server destroy " << typeid(server).name();
 }
 
+<<<<<<< HEAD
 //! Entry point called by generated client code that looks like:
 //!
 //! ProxyClient<ClassName>::M0::Result ProxyClient<ClassName>::methodName(M0::Param<0> arg0, M0::Param<1> arg1) {
@@ -1525,6 +1526,18 @@ void serverDestroy(Server& server)
 //! }
 //!
 //! Ellipses above are where generated Accessor<> type declarations are inserted.
+||||||| parent of 0fb8855 (proxy-types.h: document clientInvoke/serverInvoke)
+=======
+//! Entry point called by generated client code that looks like:
+//!
+//! ProxyClient<ClassName>::M0::Result ProxyClient<ClassName>::methodName(M0::Param<0> arg0, M0::Param<1> arg1) {
+//!     typename M0::Result result;
+//!     clientInvoke(*this, &InterfaceName::Client::methodNameRequest, MakeClientParam<...>(arg0), MakeClientParam<...>>(arg1), MakeClientParam<...>(result));
+//!     return result;
+//! }
+//!
+//! Ellipses above are where generated Accessor<> type declarations are inserted.
+>>>>>>> 0fb8855 (proxy-types.h: document clientInvoke/serverInvoke)
 template <typename ProxyClient, typename GetRequest, typename... FieldObjs>
 void clientInvoke(ProxyClient& proxy_client, const GetRequest& get_request, FieldObjs&&... fields)
 {
