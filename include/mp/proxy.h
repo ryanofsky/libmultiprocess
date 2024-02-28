@@ -60,6 +60,7 @@ public:
     ProxyClientBase(typename Interface::Client client, Connection* connection, bool destroy_connection);
     ~ProxyClientBase() noexcept;
 
+<<<<<<< HEAD
     // construct/destroy methods called during client construction/destruction
     // that can optionally be defined in capnp interfaces to invoke code on the
     // server when proxy client objects are created and destroyed.
@@ -89,6 +90,36 @@ public:
     // then it will also ensure that the destructor runs on the same thread the
     // client used to make other RPC calls, instead of running on the server
     // EventLoop thread and possibly blocking it.
+||||||| parent of 8bda2db (proxy: Document construct/destroy methods)
+    // Methods called during client construction/destruction that can optionally
+    // be defined in capnp interface to trigger the server.
+=======
+    // construct/destroy methods called during client construction/destruction
+    // that can optionally be defined in capnp interfaces to invoke code on the
+    // server when proxy client objects are created and destroyed.
+    //
+    // The construct() method is not generally very useful, but can be used to
+    // run code on the server when a ProxyClient client is constructed. The only
+    // current use adding a method to Init interfaces so client and server
+    // automatically exchange ThreadMap references and set
+    // Connection::m_thread_map values as soon as the Init client is created.
+    //
+    //     construct @0 (threadMap: Proxy.ThreadMap) -> (threadMap: Proxy.ThreadMap);
+    //
+    // But construct() is not necessary for this, thread maps could be passed
+    // through a normal method that is just called explicitly rather than
+    // implicitly.
+    //
+    // The destroy() method is much more useful than construct(), because it
+    // ensures that the server object will be destroyed synchronously before the
+    // client destructor returns. If it has a proxy.capnp Context member like:
+    //
+    //     destroy @0 (context: Proxy.Context) -> ();
+    //
+    // then it will also ensure that the destructor runs on the same thread the
+    // client used to make other RPC calls, instead of potentially blocking the
+    // event loop thread.
+>>>>>>> 8bda2db (proxy: Document construct/destroy methods)
     void construct() {}
     void destroy() {}
 
