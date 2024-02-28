@@ -1548,6 +1548,12 @@ kj::Promise<void> serverInvoke(Server& server, CallContext& call_context, Fn fn)
         using ServerContext = ServerInvokeContext<Server, CallContext>;
         using ArgList = typename ProxyClientMethodTraits<typename Params::Reads>::Params;
         ServerContext server_context{server, call_context, req};
+        // ReplaceVoid is used to support fn.invoke implementations that execute
+        // asynchronously and return promises as well as implementations that
+        // execute synchronously and returing void. The invoke function will by
+        // synchronous by default, but asynchronous if a proxy.capnp Context
+        // argument is passed, and the PassField overload returns a promise
+        // posting the request to a thread and waiting for it to complete.
         return ReplaceVoid([&]() { return fn.invoke(server_context, ArgList()); },
             [&]() { return kj::Promise<CallContext>(kj::mv(call_context)); })
             .then([&server, req](CallContext call_context) {
