@@ -119,6 +119,7 @@ auto PassField(Priority<1>, TypeList<>, ServerContext& server_context, const Fn&
                 Context::Reader context_arg = Accessor::get(params);
                 ServerContext server_context{server, call_context, req};
                 {
+<<<<<<< HEAD
                     // Before invoking the function, store a reference to the
                     // callbackThread provided by the client in the
                     // thread_local.request_threads map. This way, if this
@@ -136,6 +137,24 @@ auto PassField(Priority<1>, TypeList<>, ServerContext& server_context, const Fn&
                     // call. In this case, the callbackThread value should point
                     // to the same thread already in the map, so there is no
                     // need to update the map.
+||||||| parent of 557fd29 (proxy-types: document PassField proxy.capnp Context overload)
+=======
+                    // Before invoking the function, store a reference to the
+                    // callbackThread provided by the client in the
+                    // thread_local.request_threads map. This way, if this
+                    // server thread needs to execute any RPCs that call back to
+                    // the client, they will happen on the same client thread
+                    // that is waiting for this function, just like what would
+                    // happen if a local function made a nested call.
+                    //
+                    // If the request_threads map already has an entry for this
+                    // connections, it will be left unchanged, and it indicates
+                    // that the current thread is an RPC client which is in the
+                    // middle of another call, and this call is a nested call
+                    // running on the same thread, which should execute any
+                    // further RPC requests on this connection using the
+                    // existing map value.
+>>>>>>> 557fd29 (proxy-types: document PassField proxy.capnp Context overload)
                     auto& request_threads = g_thread_context.request_threads;
                     auto request_thread = request_threads.find(server.m_context.connection);
                     if (request_thread == request_threads.end()) {
@@ -145,6 +164,7 @@ auto PassField(Priority<1>, TypeList<>, ServerContext& server_context, const Fn&
                                     std::forward_as_tuple(context_arg.getCallbackThread(), server.m_context.connection,
                                         /* destroy_connection= */ false))
                                 .first;
+<<<<<<< HEAD
                     } else {
                         // The requests_threads map already has an entry for
                         // this connection, so this must be a recursive call.
@@ -152,6 +172,13 @@ auto PassField(Priority<1>, TypeList<>, ServerContext& server_context, const Fn&
                         // request_thread iterator, so the KJ_DEFER statement
                         // below doesn't do anything.
                         request_thread = request_threads.end();
+||||||| parent of 557fd29 (proxy-types: document PassField proxy.capnp Context overload)
+                    } else {
+                        // If recursive call, avoid remove request_threads map
+                        // entry in KJ_DEFER below.
+                        request_thread = request_threads.end();
+=======
+>>>>>>> 557fd29 (proxy-types: document PassField proxy.capnp Context overload)
                     }
                     KJ_DEFER(if (request_thread != request_threads.end()) request_threads.erase(request_thread));
                     fn.invoke(server_context, args...);
