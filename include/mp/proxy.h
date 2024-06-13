@@ -132,8 +132,22 @@ public:
     ProxyContext m_context;
 };
 
-//! Customizable (through template specialization) base class used in generated ProxyServer implementations from
-//! proxy-codegen.cpp.
+//! Customizable (through template specialization) base class referenced instead
+//! of ProxyServerBase in generated ProxyServer class implementations in
+//! gen.cpp.
+//!
+//! It can be useful to special this template class to add additional state to
+//! proxy server classes, for example to cache state between IPC calls. However,
+//! care should be taken to ensure that the state can be destroyed without
+//! blocking, because the destructor will be called from the EventLoop thread,
+//! and if it blocks, it could deadlock the program. One way to do this would be
+//! to add cleanup callbacks to the m_context.cleanup list, which will run after
+//! the wrapped implementation is destroyed. Or if earlier cleanup is necessary,
+//! the invokeDestroy and destructor methods could be defined.
+//
+//! Specializing this class can also be useful to override server methods and
+//! change the way they are implemented, or run additional code before and after
+//! them.
 template <typename Interface, typename Impl>
 struct ProxyServerCustom : public ProxyServerBase<Interface, Impl>
 {
