@@ -370,12 +370,11 @@ template <typename Interface, typename Impl>
 ProxyClientBase<Interface, Impl>::ProxyClientBase(typename Interface::Client client,
     Connection* connection,
     bool destroy_connection)
-    : m_client(std::move(client)), m_context(connection)
-
+    : m_client{std::move(client)}, m_context{&connection->m_loop, connection}
 {
     {
-        std::unique_lock<std::mutex> lock(m_context.connection->m_loop.m_mutex);
-        m_context.connection->m_loop.addClient(lock);
+        std::unique_lock<std::mutex> lock(m_context.loop->m_mutex);
+        m_context.loop->addClient(lock);
     }
 
     // Handler for the connection getting destroyed before this client object.
@@ -385,8 +384,8 @@ ProxyClientBase<Interface, Impl>::ProxyClientBase(typename Interface::Client cli
             typename Interface::Client(std::move(m_client));
         }
         {
-            std::unique_lock<std::mutex> lock(m_context.connection->m_loop.m_mutex);
-            m_context.connection->m_loop.removeClient(lock);
+            std::unique_lock<std::mutex> lock(m_context.loop->m_mutex);
+            m_context.loop->removeClient(lock);
         }
         m_context.connection = nullptr;
     });
@@ -415,14 +414,14 @@ ProxyClientBase<Interface, Impl>::ProxyClientBase(typename Interface::Client cli
         Sub::destroy(*this);
 
         // FIXME: Could just invoke removed addCleanup fn here instead of duplicating code
-        m_context.connection->m_loop.sync([&]() {
+        m_context.loop->sync([&]() {
             // Release client capability by move-assigning to temporary.
             {
                 typename Interface::Client(std::move(m_client));
             }
             {
-                std::unique_lock<std::mutex> lock(m_context.connection->m_loop.m_mutex);
-                m_context.connection->m_loop.removeClient(lock);
+                std::unique_lock<std::mutex> lock(m_context.loop->m_mutex);
+                m_context.loop->removeClient(lock);
             }
 
             if (destroy_connection) {
@@ -443,11 +442,11 @@ ProxyClientBase<Interface, Impl>::~ProxyClientBase() noexcept
 
 template <typename Interface, typename Impl>
 ProxyServerBase<Interface, Impl>::ProxyServerBase(std::shared_ptr<Impl> impl, Connection& connection)
-    : m_impl(std::move(impl)), m_context(&connection)
+    : m_impl(std::move(impl)), m_context(&connection.m_loop, &connection)
 {
     assert(m_impl);
-    std::unique_lock<std::mutex> lock(m_context.connection->m_loop.m_mutex);
-    m_context.connection->m_loop.addClient(lock);
+    std::unique_lock<std::mutex> lock(m_context.loop->m_mutex);
+    m_context.loop->addClient(lock);
 }
 
 //! ProxyServer destructor, called from the EventLoop thread by Cap'n Proto
@@ -481,8 +480,8 @@ ProxyServerBase<Interface, Impl>::~ProxyServerBase()
         });
     }
     assert(m_context.cleanup_fns.size() == 0);
-    std::unique_lock<std::mutex> lock(m_context.connection->m_loop.m_mutex);
-    m_context.connection->m_loop.removeClient(lock);
+    std::unique_lock<std::mutex> lock(m_context.loop->m_mutex);
+    m_context.loop->removeClient(lock);
 }
 
 //! If the capnp interface defined a special "destroy" method, as described the

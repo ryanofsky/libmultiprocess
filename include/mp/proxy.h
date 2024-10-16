@@ -48,10 +48,11 @@ inline void CleanupRun(CleanupList& fns) {
 //! Context data associated with proxy client and server classes.
 struct ProxyContext
 {
-    Connection* connection;
+    EventLoop* loop{nullptr};
+    Connection* connection{nullptr};
     CleanupList cleanup_fns;
 
-    ProxyContext(Connection* connection) : connection(connection) {}
+    ProxyContext(EventLoop* loop, Connection* connection) : loop{loop}, connection{connection} {}
 };
 
 //! Base class for generated ProxyClient classes that implement a C++ interface
