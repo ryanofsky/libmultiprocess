@@ -133,6 +133,10 @@ public:
     static void construct(Super&) {}
     static void destroy(Super&) {}
 
+    //! Convience method allowing ProxyClientCustom specializations to safely
+    //! access the ProxyClient subclass without needing to use static_cast.
+    Sub& self() { return static_cast<Sub&>(*this); }
+
     typename Interface::Client m_client;
     ProxyContext m_context;
 };
