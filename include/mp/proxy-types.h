@@ -166,6 +166,9 @@ struct ReadDestUpdate
     Value& m_value;
 };
 
+template <typename... LocalTypes>
+void CustomReadField();
+
 template <typename... LocalTypes, typename... Args>
 decltype(auto) ReadField(TypeList<LocalTypes...>, Args&&... args)
 {
@@ -230,8 +233,12 @@ struct ListOutput<::capnp::List<T, kind>>
     // clang-format on
 };
 
+template <typename LocalType>
+void BuildPrimitive();
+
 template <typename LocalType, typename Value, typename Output>
-void CustomBuildField(TypeList<LocalType>, Priority<0>, InvokeContext& invoke_context, Value&& value, Output&& output)
+void CustomBuildField(TypeList<LocalType>, Priority<0>, InvokeContext& invoke_context, Value&& value, Output&& output,
+                      decltype(BuildPrimitive(invoke_context, std::forward<Value>(value), TypeList<decltype(output.get())>())) *enable = nullptr)
 {
     output.set(BuildPrimitive(invoke_context, std::forward<Value>(value), TypeList<decltype(output.get())>()));
 }
