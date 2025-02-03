@@ -10,6 +10,12 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   set(CMAKE_CXX_STANDARD_REQUIRED YES)
 endif()
 
+option(BUILD_TESTING "Build the testing tree." ON)
+if(BUILD_TESTING)
+  enable_testing()
+endif()
+
+include(CTestUseLaunchers)
 include("cmake/compat_find.cmake")
 
 find_package(CapnProto REQUIRED)
