@@ -161,6 +161,7 @@ void Unlock(Lock& lock, Callback&& callback)
     callback();
 }
 
+<<<<<<< HEAD
 //! Needed for libc++/macOS compatibility. Lets code work with shared_ptr nothrow declaration
 //! https://github.com/capnproto/capnproto/issues/553#issuecomment-328554603
 template <typename T>
@@ -201,6 +202,49 @@ AsyncCallable<std::remove_reference_t<Callable>> MakeAsyncCallable(Callable&& ca
     return std::forward<Callable>(callable);
 }
 
+||||||| parent of 4b02963 (refactor: Remove DestructorCatcher and AsyncCallable)
+//! Needed for libc++/macOS compatibility. Lets code work with shared_ptr nothrow declaration
+//! https://github.com/capnproto/capnproto/issues/553#issuecomment-328554603
+template <typename T>
+struct DestructorCatcher
+{
+    T value;
+    template <typename... Params>
+    DestructorCatcher(Params&&... params) : value(kj::fwd<Params>(params)...)
+    {
+    }
+    ~DestructorCatcher() noexcept try {
+    } catch (const kj::Exception& e) { // NOLINT(bugprone-empty-catch)
+    }
+};
+
+//! Wrapper around callback function for compatibility with std::async.
+//!
+//! std::async requires callbacks to be copyable and requires noexcept
+//! destructors, but this doesn't work well with kj types which are generally
+//! move-only and not noexcept.
+template <typename Callable>
+struct AsyncCallable
+{
+    AsyncCallable(Callable&& callable) : m_callable(std::make_shared<DestructorCatcher<Callable>>(std::move(callable)))
+    {
+    }
+    AsyncCallable(const AsyncCallable&) = default;
+    AsyncCallable(AsyncCallable&&) = default;
+    ~AsyncCallable() noexcept = default;
+    ResultOf<Callable> operator()() const { return (m_callable->value)(); }
+    mutable std::shared_ptr<DestructorCatcher<Callable>> m_callable;
+};
+
+//! Construct AsyncCallable object.
+template <typename Callable>
+AsyncCallable<std::remove_reference_t<Callable>> MakeAsyncCallable(Callable&& callable)
+{
+    return std::move(callable);
+}
+
+=======
+>>>>>>> 4b02963 (refactor: Remove DestructorCatcher and AsyncCallable)
 //! Format current thread name as "{exe_name}-{$pid}/{thread_name}-{$tid}".
 std::string ThreadName(const char* exe_name);
 
