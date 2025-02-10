@@ -186,10 +186,16 @@ public:
     //! is important that ProxyServer::m_impl destructors do not run on the
     //! eventloop thread because they may need it to do I/O if they perform
     //! other IPC calls.
-    void startAsyncThread(std::unique_lock<std::mutex>& lock);
+    void startAsyncThread() MP_REQUIRES(m_mutex);
 
     //! Check if loop should exit.
+<<<<<<< HEAD
     bool done(std::unique_lock<std::mutex>& lock) const;
+||||||| parent of a848ec6 (refactor: Add clang thread safety annotations to EventLoop)
+    bool done(std::unique_lock<std::mutex>& lock);
+=======
+    bool done() MP_REQUIRES(m_mutex);
+>>>>>>> a848ec6 (refactor: Add clang thread safety annotations to EventLoop)
 
     Logger log()
     {
@@ -212,10 +218,10 @@ public:
     std::thread m_async_thread;
 
     //! Callback function to run on event loop thread during post() or sync() call.
-    kj::Function<void()>* m_post_fn = nullptr;
+    kj::Function<void()>* m_post_fn MP_GUARDED_BY(m_mutex) = nullptr;
 
     //! Callback functions to run on async thread.
-    CleanupList m_async_fns;
+    CleanupList m_async_fns MP_GUARDED_BY(m_mutex);
 
     //! Pipe read handle used to wake up the event loop thread.
     int m_wait_fd = -1;
@@ -225,11 +231,11 @@ public:
 
     //! Number of clients holding references to ProxyServerBase objects that
     //! reference this event loop.
-    int m_num_clients = 0;
+    int m_num_clients MP_GUARDED_BY(m_mutex) = 0;
 
     //! Mutex and condition variable used to post tasks to event loop and async
     //! thread.
-    std::mutex m_mutex;
+    Mutex m_mutex;
     std::condition_variable m_cv;
 
     //! Capnp IO context.
