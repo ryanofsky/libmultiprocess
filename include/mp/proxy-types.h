@@ -329,6 +329,23 @@ void PassField(Priority<0>, TypeList<>, ServerContext& server_context, const Fn&
     BuildField(TypeList<>(), server_context, Make<StructField, Accessor>(results));
 }
 
+//! Superclass providing handleChain method for derived classes providing
+//! handleField methods.
+//!
+//! Each handleField method takes care of reading or writing one field in a
+//! capnp method Request::Params struct or Request::Results struct.
+//! Each struct field corresponds to 0, 1, or more C++ client method parameters, and the handleChain method processes the C++ parameters in
+//! sequence, splitting them up and passing them to handleField calls until
+//! all are processed. handleField methods take 3 fixed arguments:
+//
+//!   - Arg1 - a ClientInvokeContext& reference
+//!   - Arg2 - a reference to the Request::Params or Request::Results object
+//!   - ParamsList - a TypeList containing 0, 1, or parameter types matching types
+//!     of client parameters that will be passed.
+//!
+//! Following those, they take a variable number of C++ client method arguments,
+//! which are passed by reference and should be used to set Request::Params fields
+//! and Request::Results fields.
 template <typename Derived, size_t N = 0>
 struct IterateFieldsHelper
 {
