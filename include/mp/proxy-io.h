@@ -365,6 +365,13 @@ public:
     CleanupList m_async_cleanup_fns;
 };
 
+//! Exception thrown when IPC client method is called after its connection is destroyed.
+class DisconnectError : public std::runtime_error
+{
+public:
+    using runtime_error::runtime_error;
+};
+
 //! Vat id for server side of connection. Required argument to RpcSystem::bootStrap()
 //!
 //! "Vat" is Cap'n Proto nomenclature for a host of various objects that facilitates
