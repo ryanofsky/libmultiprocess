@@ -24,11 +24,19 @@
 #include <variant>
 #include <vector>
 
+<<<<<<< HEAD
 #if __has_include(<cxxabi.h>)
 #include <cxxabi.h>
 #include <memory>
 #endif
 
+||||||| parent of 4f58c8c (util: Add Windows support)
+=======
+#ifdef WIN32
+#include <winsock2.h>
+#endif
+
+>>>>>>> 4f58c8c (util: Add Windows support)
 namespace mp {
 
 //! Generic utility functions used by capnp code.
@@ -275,14 +283,24 @@ std::string LogEscape(const kj::StringTree& string, size_t max_size);
 <<<<<<< HEAD
 using Stream = kj::Own<kj::AsyncIoStream>;
 
+<<<<<<< HEAD
 ||||||| parent of 091f5e1 (proxy, refactor: Change ConnectStream and ServeStream to accept stream objects)
 =======
 using Stream = kj::Own<kj::AsyncIoStream>;
 
 >>>>>>> 091f5e1 (proxy, refactor: Change ConnectStream and ServeStream to accept stream objects)
+||||||| parent of 4f58c8c (util: Add Windows support)
+=======
+#ifdef WIN32
+using ProcessId = uintptr_t;
+using SocketId = uintptr_t;
+constexpr SocketId SocketError{INVALID_SOCKET};
+#else
+>>>>>>> 4f58c8c (util: Add Windows support)
 using ProcessId = int;
 using SocketId = int;
 constexpr SocketId SocketError{-1};
+#endif
 
 <<<<<<< HEAD
 //! Information about parent process passed to child process as a command-line
@@ -300,6 +318,8 @@ constexpr SocketId SocketError{-1};
 =======
 //! Information about parent process passed to child process as a command-line
 //! argument. On unix this is the child socket fd number formatted as a string.
+//! On windows, this is a path to a named pipe the parent process will write
+//! WSADuplicateSocket info to.
 using ConnectInfo = std::string;
 
 >>>>>>> beaa50a (util, refactor: Add ConnectInfo type alias and use it)
