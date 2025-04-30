@@ -309,10 +309,10 @@ public:
     std::optional<CleanupList> m_async_fns MP_GUARDED_BY(m_mutex);
 
     //! Pipe read handle used to wake up the event loop thread.
-    int m_wait_fd = -1;
+    SocketId m_wait_fd = SocketError;
 
     //! Pipe write handle used to wake up the event loop thread.
-    int m_post_fd = -1;
+    SocketId m_post_fd = SocketError;
 
     //! Number of clients holding references to ProxyServerBase objects that
     //! reference this event loop.
