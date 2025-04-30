@@ -184,6 +184,7 @@ SocketId StartSpawned(const SpawnConnectInfo& connect_info)
     }
 }
 
+<<<<<<< HEAD
 std::array<SocketId, 2> SocketPair()
 {
     int pair[2];
@@ -204,6 +205,11 @@ ProcessId StartProcess(const std::vector<std::string>& args)
 }
 
 int WaitProcess(ProcessId pid)
+||||||| parent of 36c91a0 (util, refactor: Add ProcessId type alias and use it)
+int WaitProcess(int pid)
+=======
+int WaitProcess(ProcessId pid)
+>>>>>>> 36c91a0 (util, refactor: Add ProcessId type alias and use it)
 {
     int status;
     if (::waitpid(pid, &status, /*options=*/0) != pid) {

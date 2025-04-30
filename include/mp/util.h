@@ -271,6 +271,7 @@ std::string ThreadName(const char* exe_name);
 //! errors in python unit tests.
 std::string LogEscape(const kj::StringTree& string, size_t max_size);
 
+<<<<<<< HEAD
 using Stream = kj::Own<kj::AsyncIoStream>;
 
 using ProcessId = int;
@@ -281,14 +282,37 @@ constexpr SocketId SocketError{-1};
 //! argument. On unix this is the child socket fd number formatted as a string.
 using SpawnConnectInfo = std::string;
 
+||||||| parent of 36c91a0 (util, refactor: Add ProcessId type alias and use it)
+=======
+using ProcessId = int;
+
+>>>>>>> 36c91a0 (util, refactor: Add ProcessId type alias and use it)
 //! Callback type used by SpawnProcess below.
 using SpawnConnectInfoToArgsFn = std::function<std::vector<std::string>(const SpawnConnectInfo&)>;
 
 //! Spawn a new process that communicates with the current process over a socket
+<<<<<<< HEAD
 //! pair. Calls connect_info_to_args callback with a connection string that
 //! needs to be passed to the child process, and executes the argv command line
 //! it returns. Returns child process id and socket id.
 std::tuple<ProcessId, SocketId> SpawnProcess(SpawnConnectInfoToArgsFn&& connect_info_to_args);
+||||||| parent of 36c91a0 (util, refactor: Add ProcessId type alias and use it)
+//! pair. Returns pid through an output argument, and file descriptor for the
+//! local side of the socket.
+//! The fd_to_args callback is invoked in the parent process before fork().
+//! It must not rely on child pid/state, and must return the command line
+//! arguments that should be used to execute the process. Embed the remote file
+//! descriptor number in whatever format the child process expects.
+int SpawnProcess(int& pid, FdToArgsFn&& fd_to_args);
+=======
+//! pair. Returns pid through an output argument, and file descriptor for the
+//! local side of the socket.
+//! The fd_to_args callback is invoked in the parent process before fork().
+//! It must not rely on child pid/state, and must return the command line
+//! arguments that should be used to execute the process. Embed the remote file
+//! descriptor number in whatever format the child process expects.
+int SpawnProcess(ProcessId& pid, FdToArgsFn&& fd_to_args);
+>>>>>>> 36c91a0 (util, refactor: Add ProcessId type alias and use it)
 
 //! Initialize spawned child process using the SpawnConnectInfo string passed to it,
 //! returning a socket id for communicating with the parent process.

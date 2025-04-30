@@ -26,7 +26,15 @@ namespace fs = std::filesystem;
 
 static auto Spawn(mp::EventLoop& loop, const std::string& process_argv0, const std::string& new_exe_name)
 {
+<<<<<<< HEAD
     const auto [pid, socket] = mp::SpawnProcess([&](mp::SpawnConnectInfo info) -> std::vector<std::string> {
+||||||| parent of 36c91a0 (util, refactor: Add ProcessId type alias and use it)
+    int pid;
+    const int fd = mp::SpawnProcess(pid, [&](int fd) -> std::vector<std::string> {
+=======
+    mp::ProcessId pid;
+    const int fd = mp::SpawnProcess(pid, [&](int fd) -> std::vector<std::string> {
+>>>>>>> 36c91a0 (util, refactor: Add ProcessId type alias and use it)
         fs::path path = process_argv0;
         path.remove_filename();
         path.append(new_exe_name);
