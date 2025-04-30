@@ -132,6 +132,7 @@ std::tuple<ProcessId, SocketId> SpawnProcess(ConnectInfoToArgsFn&& connect_info_
 >>>>>>> beaa50a (util, refactor: Add ConnectInfo type alias and use it)
 {
 <<<<<<< HEAD
+<<<<<<< HEAD
     auto fds{SocketPair()};
 ||||||| parent of 94af41b (util, refactor: Add SocketId type alias and use it)
     int fds[2];
@@ -144,6 +145,14 @@ std::tuple<ProcessId, SocketId> SpawnProcess(ConnectInfoToArgsFn&& connect_info_
         throw std::system_error(errno, std::system_category(), "socketpair");
     }
 >>>>>>> 94af41b (util, refactor: Add SocketId type alias and use it)
+||||||| parent of 022b29b (util, refactor: Add SocketPair() and use it in SpawnProcess)
+    SocketId fds[2];
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, fds) != 0) {
+        throw std::system_error(errno, std::system_category(), "socketpair");
+    }
+=======
+    auto fds{SocketPair()};
+>>>>>>> 022b29b (util, refactor: Add SocketPair() and use it in SpawnProcess)
 
     // Evaluate the callback and build the argv array before forking.
     //
@@ -216,10 +225,21 @@ SocketId StartSpawned(const ConnectInfo& connect_info)
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 SocketId StartSpawned(const SpawnConnectInfo& connect_info)
 ||||||| parent of b16f8c4 (util, refactor: Handle forking inside ExecProcess)
 void ExecProcess(const std::vector<std::string>& args)
 =======
+||||||| parent of 022b29b (util, refactor: Add SocketPair() and use it in SpawnProcess)
+=======
+std::array<SocketId, 2> SocketPair()
+{
+    int pair[2];
+    KJ_SYSCALL(socketpair(AF_UNIX, SOCK_STREAM, 0, pair));
+    return {pair[0], pair[1]};
+}
+
+>>>>>>> 022b29b (util, refactor: Add SocketPair() and use it in SpawnProcess)
 ProcessId ExecProcess(const std::vector<std::string>& args)
 >>>>>>> b16f8c4 (util, refactor: Handle forking inside ExecProcess)
 {

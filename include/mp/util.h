@@ -370,6 +370,10 @@ SocketId StartSpawned(const SpawnConnectInfo& connect_info);
 //! between parent and child processes.
 std::array<SocketId, 2> SocketPair();
 
+//! Create a socket pair that can be used to communicate within a process or
+//! between parent and child processes.
+std::array<SocketId, 2> SocketPair();
+
 //! Start a process and return its process id. Caller should call WaitProcess
 //! on the returned id.
 ProcessId StartProcess(const std::vector<std::string>& args);
