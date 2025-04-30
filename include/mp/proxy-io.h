@@ -211,6 +211,12 @@ private:
 
 std::string LongThreadName(const char* exe_name);
 
+//! Wrap a socket file descriptor as an async stream, taking ownership of the fd.
+inline Stream MakeStream(kj::AsyncIoContext& io_context, SocketId socket)
+{
+    return io_context.lowLevelProvider->wrapSocketFd(socket, kj::LowLevelAsyncIoProvider::TAKE_OWNERSHIP);
+}
+
 //! Event loop implementation.
 //!
 //! Cap'n Proto threading model is very simple: all I/O operations are
@@ -806,17 +812,15 @@ kj::Promise<T> ProxyServer<Thread>::post(Fn&& fn)
     return ret;
 }
 
-//! Given stream file descriptor, make a new ProxyClient object to send requests
-//! over the stream. Also create a new Connection object embedded in the
-//! client that is freed when the client is closed.
+//! Given a stream, make a new ProxyClient object to send requests over it.
+//! Also create a new Connection object embedded in the client that is freed
+//! when the client is closed.
 template <typename InitInterface>
-std::unique_ptr<ProxyClient<InitInterface>> ConnectStream(EventLoop& loop, int fd)
+std::unique_ptr<ProxyClient<InitInterface>> ConnectStream(EventLoop& loop, Stream stream)
 {
     typename InitInterface::Client init_client(nullptr);
     std::unique_ptr<Connection> connection;
     loop.sync([&] {
-        auto stream =
-            loop.m_io_context.lowLevelProvider->wrapSocketFd(fd, kj::LowLevelAsyncIoProvider::TAKE_OWNERSHIP);
         connection = std::make_unique<Connection>(loop, kj::mv(stream));
         init_client = connection->m_rpc_system->bootstrap(ServerVatId().vat_id).castAs<InitInterface>();
         Connection* connection_ptr = connection.get();
@@ -834,7 +838,7 @@ std::unique_ptr<ProxyClient<InitInterface>> ConnectStream(EventLoop& loop, int f
 //! ProxyServer in a Connection object that is stored and erased if
 //! disconnected. This should be called from the event loop thread.
 template <typename InitInterface, typename InitImpl>
-void _Serve(EventLoop& loop, kj::Own<kj::AsyncIoStream>&& stream, InitImpl& init)
+void _Serve(EventLoop& loop, Stream&& stream, InitImpl& init)
 {
     loop.m_incoming_connections.emplace_front(loop, kj::mv(stream), [&](Connection& connection) {
         // Disable deleter so proxy server object doesn't attempt to delete the
@@ -858,19 +862,18 @@ void _Listen(EventLoop& loop, kj::Own<kj::ConnectionReceiver>&& listener, InitIm
 {
     auto* ptr = listener.get();
     loop.m_task_set->add(ptr->accept().then(
-        [&loop, &init, listener = kj::mv(listener)](kj::Own<kj::AsyncIoStream>&& stream) mutable {
+        [&loop, &init, listener = kj::mv(listener)](Stream&& stream) mutable {
             _Serve<InitInterface>(loop, kj::mv(stream), init);
             _Listen<InitInterface>(loop, kj::mv(listener), init);
         }));
 }
 
-//! Given stream file descriptor and an init object, handle requests on the
-//! stream by calling methods on the Init object.
+//! Given a stream and an init object, handle requests on the stream by calling
+//! methods on the Init object.
 template <typename InitInterface, typename InitImpl>
-void ServeStream(EventLoop& loop, int fd, InitImpl& init)
+void ServeStream(EventLoop& loop, Stream stream, InitImpl& init)
 {
-    _Serve<InitInterface>(
-        loop, loop.m_io_context.lowLevelProvider->wrapSocketFd(fd, kj::LowLevelAsyncIoProvider::TAKE_OWNERSHIP), init);
+    _Serve<InitInterface>(loop, kj::mv(stream), init);
 }
 
 //! Given listening socket file descriptor and an init object, handle incoming
