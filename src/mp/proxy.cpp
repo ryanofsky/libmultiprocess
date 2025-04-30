@@ -77,6 +77,7 @@ void EventLoopRef::reset(bool relock) MP_NO_TSA
         loop->m_num_refs -= 1;
         if (loop->done()) {
             loop->m_cv.notify_all();
+<<<<<<< HEAD
             // Capture loop->m_post_writer pointer before releasing the lock.
             // The pointer can't actually change before the write() call below,
             // but copying it with the lock held instead of accessing it
@@ -85,12 +86,22 @@ void EventLoopRef::reset(bool relock) MP_NO_TSA
             // report the pointer being used in this thread and assigned in the
             // other thread without synchronization between.
             kj::OutputStream* post_writer{loop->m_post_writer.get()};
+||||||| parent of 3c81cf2 (proxy, refactor: Replace EventLoop wakeup fd integers with KJ stream objects)
+            int post_fd{loop->m_post_fd};
+=======
+>>>>>>> 3c81cf2 (proxy, refactor: Replace EventLoop wakeup fd integers with KJ stream objects)
             loop_lock->unlock();
             char buffer = 0;
+<<<<<<< HEAD
             // It safe to access post_writer here because the loop can't
             // exit until this write takes place. See "Intentionally do not
             // break..."  comment in EventLoop::loop
             post_writer->write(&buffer, 1);
+||||||| parent of 3c81cf2 (proxy, refactor: Replace EventLoop wakeup fd integers with KJ stream objects)
+            KJ_SYSCALL(write(post_fd, &buffer, 1)); // NOLINT(bugprone-suspicious-semicolon)
+=======
+            loop->m_post_writer->write(&buffer, 1);
+>>>>>>> 3c81cf2 (proxy, refactor: Replace EventLoop wakeup fd integers with KJ stream objects)
             // By default, do not try to relock `loop_lock` after writing,
             // because the event loop could wake up and destroy itself and the
             // mutex might no longer exist.
@@ -257,6 +268,7 @@ EventLoop::EventLoop(const char* exe_name, LogOptions log_opts, void* context)
       m_context(context)
 {
 <<<<<<< HEAD
+<<<<<<< HEAD
     auto pipe = m_io_context.provider->newTwoWayPipe();
     m_wait_stream = kj::mv(pipe.ends[0]);
     m_post_stream = kj::mv(pipe.ends[1]);
@@ -276,6 +288,21 @@ EventLoop::EventLoop(const char* exe_name, LogOptions log_opts, void* context)
     m_wait_fd = fds[0];
     m_post_fd = fds[1];
 >>>>>>> 94af41b (util, refactor: Add SocketId type alias and use it)
+||||||| parent of 3c81cf2 (proxy, refactor: Replace EventLoop wakeup fd integers with KJ stream objects)
+    SocketId fds[2];
+    KJ_SYSCALL(socketpair(AF_UNIX, SOCK_STREAM, 0, fds));
+    m_wait_fd = fds[0];
+    m_post_fd = fds[1];
+=======
+    auto pipe = m_io_context.provider->newTwoWayPipe();
+    m_wait_stream = kj::mv(pipe.ends[0]);
+    m_post_stream = kj::mv(pipe.ends[1]);
+    KJ_IF_MAYBE(fd, m_post_stream->getFd()) {
+        m_post_writer = kj::heap<kj::FdOutputStream>(*fd);
+    } else {
+        throw std::logic_error("Could not get file descriptor for new pipe.");
+    }
+>>>>>>> 3c81cf2 (proxy, refactor: Replace EventLoop wakeup fd integers with KJ stream objects)
 }
 
 EventLoop::~EventLoop()
@@ -284,9 +311,19 @@ EventLoop::~EventLoop()
     const Lock lock(m_mutex);
     KJ_ASSERT(m_post_fn == nullptr);
     KJ_ASSERT(!m_async_fns);
+<<<<<<< HEAD
     KJ_ASSERT(!m_wait_stream);
     KJ_ASSERT(!m_post_stream);
     KJ_ASSERT(m_num_refs == 0);
+||||||| parent of 3c81cf2 (proxy, refactor: Replace EventLoop wakeup fd integers with KJ stream objects)
+    KJ_ASSERT(m_wait_fd == -1);
+    KJ_ASSERT(m_post_fd == -1);
+    KJ_ASSERT(m_num_clients == 0);
+=======
+    KJ_ASSERT(!m_wait_stream);
+    KJ_ASSERT(!m_post_stream);
+    KJ_ASSERT(m_num_clients == 0);
+>>>>>>> 3c81cf2 (proxy, refactor: Replace EventLoop wakeup fd integers with KJ stream objects)
 
     // Spin event loop. wait for any promises triggered by RPC shutdown.
     // auto cleanup = kj::evalLater([]{});
@@ -333,9 +370,17 @@ void EventLoop::loop()
     MP_LOG(*this, Log::Info) << "EventLoop::loop bye.";
     wait_stream = nullptr;
     const Lock lock(m_mutex);
+<<<<<<< HEAD
     m_post_writer = nullptr;
     m_wait_stream = nullptr;
     m_post_stream = nullptr;
+||||||| parent of 3c81cf2 (proxy, refactor: Replace EventLoop wakeup fd integers with KJ stream objects)
+    m_wait_fd = -1;
+    m_post_fd = -1;
+=======
+    m_wait_stream = nullptr;
+    m_post_stream = nullptr;
+>>>>>>> 3c81cf2 (proxy, refactor: Replace EventLoop wakeup fd integers with KJ stream objects)
     m_async_fns.reset();
     m_cv.notify_all();
 }
