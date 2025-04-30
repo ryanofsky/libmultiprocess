@@ -214,9 +214,25 @@ private:
 
 std::string LongThreadName(const char* exe_name);
 
+<<<<<<< HEAD
 //! Wrap a socket file descriptor as an async stream, taking ownership of the fd.
 Stream MakeStream(EventLoop&loop, SocketId socket);
 
+||||||| parent of 091f5e1 (proxy, refactor: Change ConnectStream and ServeStream to accept stream objects)
+=======
+inline SocketId StreamSocketId(const Stream& stream)
+{
+    if (stream) KJ_IF_MAYBE(socket, stream->getFd()) return *socket;
+    throw std::logic_error("Stream socket unset");
+}
+
+//! Wrap a socket file descriptor as an async stream, taking ownership of the fd.
+inline Stream MakeStream(kj::AsyncIoContext& io_context, SocketId socket)
+{
+    return io_context.lowLevelProvider->wrapSocketFd(socket, kj::LowLevelAsyncIoProvider::TAKE_OWNERSHIP);
+}
+
+>>>>>>> 091f5e1 (proxy, refactor: Change ConnectStream and ServeStream to accept stream objects)
 //! Event loop implementation.
 //!
 //! Cap'n Proto threading model is very simple: all I/O operations are
@@ -833,7 +849,13 @@ kj::Promise<T> ProxyServer<Thread>::post(Fn&& fn)
 //! Also create a new Connection object embedded in the client that is freed
 //! when the client is closed.
 template <typename InitInterface>
+<<<<<<< HEAD
 std::unique_ptr<ProxyClient<InitInterface>> ConnectStream(EventLoop& loop, Stream stream)
+||||||| parent of 091f5e1 (proxy, refactor: Change ConnectStream and ServeStream to accept stream objects)
+std::unique_ptr<ProxyClient<InitInterface>> ConnectStream(EventLoop& loop, int fd)
+=======
+std::unique_ptr<ProxyClient<InitInterface>> ConnectStream(EventLoop& loop, kj::Own<kj::AsyncIoStream> stream)
+>>>>>>> 091f5e1 (proxy, refactor: Change ConnectStream and ServeStream to accept stream objects)
 {
     typename InitInterface::Client init_client(nullptr);
     std::unique_ptr<Connection> connection;
@@ -911,9 +933,22 @@ void _Listen(const std::shared_ptr<Listener>& listener, EventLoop& loop, InitImp
 //! Given a stream and an init object, handle requests on the stream by calling
 //! methods on the Init object.
 template <typename InitInterface, typename InitImpl>
+<<<<<<< HEAD
 void ServeStream(EventLoop& loop, Stream stream, InitImpl& init)
+||||||| parent of 091f5e1 (proxy, refactor: Change ConnectStream and ServeStream to accept stream objects)
+void ServeStream(EventLoop& loop, int fd, InitImpl& init)
+=======
+void ServeStream(EventLoop& loop, kj::Own<kj::AsyncIoStream> stream, InitImpl& init)
+>>>>>>> 091f5e1 (proxy, refactor: Change ConnectStream and ServeStream to accept stream objects)
 {
+<<<<<<< HEAD
     _Serve<InitInterface>(loop, kj::mv(stream), init, [] {});
+||||||| parent of 091f5e1 (proxy, refactor: Change ConnectStream and ServeStream to accept stream objects)
+    _Serve<InitInterface>(
+        loop, loop.m_io_context.lowLevelProvider->wrapSocketFd(fd, kj::LowLevelAsyncIoProvider::TAKE_OWNERSHIP), init);
+=======
+    _Serve<InitInterface>(loop, kj::mv(stream), init);
+>>>>>>> 091f5e1 (proxy, refactor: Change ConnectStream and ServeStream to accept stream objects)
 }
 
 //! Given listening socket identifier and an init object, handle incoming

@@ -71,12 +71,18 @@ int main(int argc, char** argv)
     mp::EventLoop loop("mpprinter", LogPrint);
     std::unique_ptr<Init> init = std::make_unique<InitImpl>();
 <<<<<<< HEAD
+<<<<<<< HEAD
     mp::ServeStream<InitInterface>(loop, mp::MakeStream(loop, socket), *init);
 ||||||| parent of beaa50a (util, refactor: Add ConnectInfo type alias and use it)
     mp::ServeStream<InitInterface>(loop, fd, *init);
 =======
     mp::ServeStream<InitInterface>(loop, socket, *init);
 >>>>>>> beaa50a (util, refactor: Add ConnectInfo type alias and use it)
+||||||| parent of 091f5e1 (proxy, refactor: Change ConnectStream and ServeStream to accept stream objects)
+    mp::ServeStream<InitInterface>(loop, socket, *init);
+=======
+    mp::ServeStream<InitInterface>(loop, mp::MakeStream(loop.m_io_context, socket), *init);
+>>>>>>> 091f5e1 (proxy, refactor: Change ConnectStream and ServeStream to accept stream objects)
     loop.loop();
     return 0;
 }

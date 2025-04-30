@@ -54,12 +54,18 @@ static auto Spawn(mp::EventLoop& loop, const std::string& process_argv0, const s
         return {path.string(), std::move(info)};
     });
 <<<<<<< HEAD
+<<<<<<< HEAD
     return std::make_tuple(mp::ConnectStream<InitInterface>(loop, mp::MakeStream(loop, socket)), pid);
 ||||||| parent of beaa50a (util, refactor: Add ConnectInfo type alias and use it)
     return std::make_tuple(mp::ConnectStream<InitInterface>(loop, fd), pid);
 =======
     return std::make_tuple(mp::ConnectStream<InitInterface>(loop, socket), pid);
 >>>>>>> beaa50a (util, refactor: Add ConnectInfo type alias and use it)
+||||||| parent of 091f5e1 (proxy, refactor: Change ConnectStream and ServeStream to accept stream objects)
+    return std::make_tuple(mp::ConnectStream<InitInterface>(loop, socket), pid);
+=======
+    return std::make_tuple(mp::ConnectStream<InitInterface>(loop, mp::MakeStream(loop.m_io_context, socket)), pid);
+>>>>>>> 091f5e1 (proxy, refactor: Change ConnectStream and ServeStream to accept stream objects)
 }
 
 static void LogPrint(mp::LogMessage log_data)

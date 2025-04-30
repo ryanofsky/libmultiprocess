@@ -272,8 +272,14 @@ std::string ThreadName(const char* exe_name);
 std::string LogEscape(const kj::StringTree& string, size_t max_size);
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 using Stream = kj::Own<kj::AsyncIoStream>;
 
+||||||| parent of 091f5e1 (proxy, refactor: Change ConnectStream and ServeStream to accept stream objects)
+=======
+using Stream = kj::Own<kj::AsyncIoStream>;
+
+>>>>>>> 091f5e1 (proxy, refactor: Change ConnectStream and ServeStream to accept stream objects)
 using ProcessId = int;
 using SocketId = int;
 constexpr SocketId SocketError{-1};
