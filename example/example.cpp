@@ -27,6 +27,7 @@ namespace fs = std::filesystem;
 static auto Spawn(mp::EventLoop& loop, const std::string& process_argv0, const std::string& new_exe_name)
 {
 <<<<<<< HEAD
+<<<<<<< HEAD
     const auto [pid, socket] = mp::SpawnProcess([&](mp::SpawnConnectInfo info) -> std::vector<std::string> {
 ||||||| parent of 36c91a0 (util, refactor: Add ProcessId type alias and use it)
     int pid;
@@ -41,12 +42,24 @@ static auto Spawn(mp::EventLoop& loop, const std::string& process_argv0, const s
 =======
     const mp::SocketId fd = mp::SpawnProcess(pid, [&](mp::SocketId fd) -> std::vector<std::string> {
 >>>>>>> 94af41b (util, refactor: Add SocketId type alias and use it)
+||||||| parent of beaa50a (util, refactor: Add ConnectInfo type alias and use it)
+    mp::ProcessId pid;
+    const mp::SocketId fd = mp::SpawnProcess(pid, [&](mp::SocketId fd) -> std::vector<std::string> {
+=======
+    const auto [pid, socket] = mp::SpawnProcess([&](mp::ConnectInfo info) -> std::vector<std::string> {
+>>>>>>> beaa50a (util, refactor: Add ConnectInfo type alias and use it)
         fs::path path = process_argv0;
         path.remove_filename();
         path.append(new_exe_name);
         return {path.string(), std::move(info)};
     });
+<<<<<<< HEAD
     return std::make_tuple(mp::ConnectStream<InitInterface>(loop, mp::MakeStream(loop, socket)), pid);
+||||||| parent of beaa50a (util, refactor: Add ConnectInfo type alias and use it)
+    return std::make_tuple(mp::ConnectStream<InitInterface>(loop, fd), pid);
+=======
+    return std::make_tuple(mp::ConnectStream<InitInterface>(loop, socket), pid);
+>>>>>>> beaa50a (util, refactor: Add ConnectInfo type alias and use it)
 }
 
 static void LogPrint(mp::LogMessage log_data)

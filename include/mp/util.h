@@ -278,6 +278,7 @@ using ProcessId = int;
 using SocketId = int;
 constexpr SocketId SocketError{-1};
 
+<<<<<<< HEAD
 //! Information about parent process passed to child process as a command-line
 //! argument. On unix this is the child socket fd number formatted as a string.
 using SpawnConnectInfo = std::string;
@@ -289,7 +290,15 @@ using SocketId = int;
 constexpr SocketId SocketError{-1};
 
 >>>>>>> 36c91a0 (util, refactor: Add ProcessId type alias and use it)
+||||||| parent of beaa50a (util, refactor: Add ConnectInfo type alias and use it)
+=======
+//! Information about parent process passed to child process as a command-line
+//! argument. On unix this is the child socket fd number formatted as a string.
+using ConnectInfo = std::string;
+
+>>>>>>> beaa50a (util, refactor: Add ConnectInfo type alias and use it)
 //! Callback type used by SpawnProcess below.
+<<<<<<< HEAD
 <<<<<<< HEAD
 using SpawnConnectInfoToArgsFn = std::function<std::vector<std::string>(const SpawnConnectInfo&)>;
 ||||||| parent of 94af41b (util, refactor: Add SocketId type alias and use it)
@@ -297,8 +306,14 @@ using FdToArgsFn = std::function<std::vector<std::string>(int fd)>;
 =======
 using FdToArgsFn = std::function<std::vector<std::string>(SocketId fd)>;
 >>>>>>> 94af41b (util, refactor: Add SocketId type alias and use it)
+||||||| parent of beaa50a (util, refactor: Add ConnectInfo type alias and use it)
+using FdToArgsFn = std::function<std::vector<std::string>(SocketId fd)>;
+=======
+using ConnectInfoToArgsFn = std::function<std::vector<std::string>(const ConnectInfo&)>;
+>>>>>>> beaa50a (util, refactor: Add ConnectInfo type alias and use it)
 
 //! Spawn a new process that communicates with the current process over a socket
+<<<<<<< HEAD
 <<<<<<< HEAD
 //! pair. Calls connect_info_to_args callback with a connection string that
 //! needs to be passed to the child process, and executes the argv command line
@@ -327,6 +342,24 @@ int SpawnProcess(ProcessId& pid, FdToArgsFn&& fd_to_args);
 =======
 SocketId SpawnProcess(ProcessId& pid, FdToArgsFn&& fd_to_args);
 >>>>>>> 94af41b (util, refactor: Add SocketId type alias and use it)
+||||||| parent of beaa50a (util, refactor: Add ConnectInfo type alias and use it)
+//! pair. Returns pid through an output argument, and file descriptor for the
+//! local side of the socket.
+//! The fd_to_args callback is invoked in the parent process before fork().
+//! It must not rely on child pid/state, and must return the command line
+//! arguments that should be used to execute the process. Embed the remote file
+//! descriptor number in whatever format the child process expects.
+SocketId SpawnProcess(ProcessId& pid, FdToArgsFn&& fd_to_args);
+=======
+//! pair. Calls connect_info_to_args callback with a connection string that
+//! needs to be passed to the child process, and executes the argv command line
+//! it returns. Returns child process id and socket id.
+std::tuple<ProcessId, SocketId> SpawnProcess(ConnectInfoToArgsFn&& connect_info_to_args);
+
+//! Initialize spawned child process using the ConnectInfo string passed to it,
+//! returning a socket id for communicating with the parent process.
+SocketId StartSpawned(const ConnectInfo& connect_info);
+>>>>>>> beaa50a (util, refactor: Add ConnectInfo type alias and use it)
 
 //! Initialize spawned child process using the SpawnConnectInfo string passed to it,
 //! returning a socket id for communicating with the parent process.

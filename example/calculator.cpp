@@ -51,6 +51,7 @@ int main(int argc, char** argv)
         return 1;
     }
 <<<<<<< HEAD
+<<<<<<< HEAD
     mp::SocketId socket{mp::StartSpawned(argv[1])};
 ||||||| parent of 94af41b (util, refactor: Add SocketId type alias and use it)
     int fd;
@@ -65,9 +66,24 @@ int main(int argc, char** argv)
         return 1;
     }
 >>>>>>> 94af41b (util, refactor: Add SocketId type alias and use it)
+||||||| parent of beaa50a (util, refactor: Add ConnectInfo type alias and use it)
+    mp::SocketId fd;
+    if (std::from_chars(argv[1], argv[1] + strlen(argv[1]), fd).ec != std::errc{}) {
+        std::cerr << argv[1] << " is not a number or is larger than an int\n";
+        return 1;
+    }
+=======
+    mp::SocketId socket{mp::StartSpawned(argv[1])};
+>>>>>>> beaa50a (util, refactor: Add ConnectInfo type alias and use it)
     mp::EventLoop loop("mpcalculator", LogPrint);
     std::unique_ptr<Init> init = std::make_unique<InitImpl>();
+<<<<<<< HEAD
     mp::ServeStream<InitInterface>(loop, mp::MakeStream(loop, socket), *init);
+||||||| parent of beaa50a (util, refactor: Add ConnectInfo type alias and use it)
+    mp::ServeStream<InitInterface>(loop, fd, *init);
+=======
+    mp::ServeStream<InitInterface>(loop, socket, *init);
+>>>>>>> beaa50a (util, refactor: Add ConnectInfo type alias and use it)
     loop.loop();
     return 0;
 }

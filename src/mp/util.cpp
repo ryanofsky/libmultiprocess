@@ -118,12 +118,18 @@ std::string LogEscape(const kj::StringTree& string, size_t max_size)
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 std::tuple<ProcessId, SocketId> SpawnProcess(SpawnConnectInfoToArgsFn&& connect_info_to_args)
 ||||||| parent of 94af41b (util, refactor: Add SocketId type alias and use it)
 int SpawnProcess(int& pid, FdToArgsFn&& fd_to_args)
 =======
 SocketId SpawnProcess(ProcessId& pid, FdToArgsFn&& fd_to_args)
 >>>>>>> 94af41b (util, refactor: Add SocketId type alias and use it)
+||||||| parent of beaa50a (util, refactor: Add ConnectInfo type alias and use it)
+SocketId SpawnProcess(ProcessId& pid, FdToArgsFn&& fd_to_args)
+=======
+std::tuple<ProcessId, SocketId> SpawnProcess(ConnectInfoToArgsFn&& connect_info_to_args)
+>>>>>>> beaa50a (util, refactor: Add ConnectInfo type alias and use it)
 {
 <<<<<<< HEAD
     auto fds{SocketPair()};
@@ -148,12 +154,18 @@ SocketId SpawnProcess(ProcessId& pid, FdToArgsFn&& fd_to_args)
     const std::vector<std::string> args{connect_info_to_args(std::to_string(fds[0]))};
     const std::vector<char*> argv{MakeArgv(args)};
 
+<<<<<<< HEAD
     // Clear FD_CLOEXEC on fds[0] before forking so it survives exec in the child.
     int fds0_flags;
     KJ_SYSCALL(fds0_flags = fcntl(fds[0], F_GETFD));
     KJ_SYSCALL(fcntl(fds[0], F_SETFD, fds0_flags & ~FD_CLOEXEC));
 
     ProcessId pid = fork();
+||||||| parent of beaa50a (util, refactor: Add ConnectInfo type alias and use it)
+    pid = fork();
+=======
+    ProcessId pid = fork();
+>>>>>>> beaa50a (util, refactor: Add ConnectInfo type alias and use it)
     if (pid == -1) {
         throw std::system_error(errno, std::system_category(), "fork");
     }
@@ -189,7 +201,18 @@ SocketId SpawnProcess(ProcessId& pid, FdToArgsFn&& fd_to_args)
         perror("execvp failed");
         _exit(127);
     }
+<<<<<<< HEAD
     return {pid, fds[1]};
+||||||| parent of beaa50a (util, refactor: Add ConnectInfo type alias and use it)
+    return fds[1];
+=======
+    return {pid, fds[1]};
+}
+
+SocketId StartSpawned(const ConnectInfo& connect_info)
+{
+    return std::stoi(connect_info);
+>>>>>>> beaa50a (util, refactor: Add ConnectInfo type alias and use it)
 }
 
 SocketId StartSpawned(const SpawnConnectInfo& connect_info)
