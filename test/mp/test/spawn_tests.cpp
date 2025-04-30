@@ -97,8 +97,14 @@ KJ_TEST("SpawnProcess does not run callback in child")
     const int fd{mp::SpawnProcess(pid, [&](int child_fd) -> std::vector<std::string> {
 =======
     ProcessId pid{-1};
+<<<<<<< HEAD
     const int fd{SpawnProcess(pid, [&](int child_fd) -> std::vector<std::string> {
 >>>>>>> 36c91a0 (util, refactor: Add ProcessId type alias and use it)
+||||||| parent of 94af41b (util, refactor: Add SocketId type alias and use it)
+    const int fd{SpawnProcess(pid, [&](int child_fd) -> std::vector<std::string> {
+=======
+    const SocketId fd{SpawnProcess(pid, [&](SocketId child_fd) -> std::vector<std::string> {
+>>>>>>> 94af41b (util, refactor: Add SocketId type alias and use it)
         // If this callback runs in the post-fork child, target_mutex appears
         // locked forever (the owning thread does not exist), so this deadlocks.
         std::lock_guard<std::mutex> g(target_mutex);

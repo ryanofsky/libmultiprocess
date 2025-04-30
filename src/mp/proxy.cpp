@@ -256,6 +256,7 @@ EventLoop::EventLoop(const char* exe_name, LogOptions log_opts, void* context)
       m_log_opts(std::move(log_opts)),
       m_context(context)
 {
+<<<<<<< HEAD
     auto pipe = m_io_context.provider->newTwoWayPipe();
     m_wait_stream = kj::mv(pipe.ends[0]);
     m_post_stream = kj::mv(pipe.ends[1]);
@@ -264,6 +265,17 @@ EventLoop::EventLoop(const char* exe_name, LogOptions log_opts, void* context)
     } else {
         throw std::logic_error("Could not get file descriptor for new pipe.");
     }
+||||||| parent of 94af41b (util, refactor: Add SocketId type alias and use it)
+    int fds[2];
+    KJ_SYSCALL(socketpair(AF_UNIX, SOCK_STREAM, 0, fds));
+    m_wait_fd = fds[0];
+    m_post_fd = fds[1];
+=======
+    SocketId fds[2];
+    KJ_SYSCALL(socketpair(AF_UNIX, SOCK_STREAM, 0, fds));
+    m_wait_fd = fds[0];
+    m_post_fd = fds[1];
+>>>>>>> 94af41b (util, refactor: Add SocketId type alias and use it)
 }
 
 EventLoop::~EventLoop()

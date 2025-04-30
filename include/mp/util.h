@@ -285,10 +285,18 @@ using SpawnConnectInfo = std::string;
 ||||||| parent of 36c91a0 (util, refactor: Add ProcessId type alias and use it)
 =======
 using ProcessId = int;
+using SocketId = int;
+constexpr SocketId SocketError{-1};
 
 >>>>>>> 36c91a0 (util, refactor: Add ProcessId type alias and use it)
 //! Callback type used by SpawnProcess below.
+<<<<<<< HEAD
 using SpawnConnectInfoToArgsFn = std::function<std::vector<std::string>(const SpawnConnectInfo&)>;
+||||||| parent of 94af41b (util, refactor: Add SocketId type alias and use it)
+using FdToArgsFn = std::function<std::vector<std::string>(int fd)>;
+=======
+using FdToArgsFn = std::function<std::vector<std::string>(SocketId fd)>;
+>>>>>>> 94af41b (util, refactor: Add SocketId type alias and use it)
 
 //! Spawn a new process that communicates with the current process over a socket
 <<<<<<< HEAD
@@ -311,8 +319,14 @@ int SpawnProcess(int& pid, FdToArgsFn&& fd_to_args);
 //! It must not rely on child pid/state, and must return the command line
 //! arguments that should be used to execute the process. Embed the remote file
 //! descriptor number in whatever format the child process expects.
+<<<<<<< HEAD
 int SpawnProcess(ProcessId& pid, FdToArgsFn&& fd_to_args);
 >>>>>>> 36c91a0 (util, refactor: Add ProcessId type alias and use it)
+||||||| parent of 94af41b (util, refactor: Add SocketId type alias and use it)
+int SpawnProcess(ProcessId& pid, FdToArgsFn&& fd_to_args);
+=======
+SocketId SpawnProcess(ProcessId& pid, FdToArgsFn&& fd_to_args);
+>>>>>>> 94af41b (util, refactor: Add SocketId type alias and use it)
 
 //! Initialize spawned child process using the SpawnConnectInfo string passed to it,
 //! returning a socket id for communicating with the parent process.

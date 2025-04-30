@@ -117,9 +117,27 @@ std::string LogEscape(const kj::StringTree& string, size_t max_size)
     return result;
 }
 
+<<<<<<< HEAD
 std::tuple<ProcessId, SocketId> SpawnProcess(SpawnConnectInfoToArgsFn&& connect_info_to_args)
+||||||| parent of 94af41b (util, refactor: Add SocketId type alias and use it)
+int SpawnProcess(int& pid, FdToArgsFn&& fd_to_args)
+=======
+SocketId SpawnProcess(ProcessId& pid, FdToArgsFn&& fd_to_args)
+>>>>>>> 94af41b (util, refactor: Add SocketId type alias and use it)
 {
+<<<<<<< HEAD
     auto fds{SocketPair()};
+||||||| parent of 94af41b (util, refactor: Add SocketId type alias and use it)
+    int fds[2];
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, fds) != 0) {
+        throw std::system_error(errno, std::system_category(), "socketpair");
+    }
+=======
+    SocketId fds[2];
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, fds) != 0) {
+        throw std::system_error(errno, std::system_category(), "socketpair");
+    }
+>>>>>>> 94af41b (util, refactor: Add SocketId type alias and use it)
 
     // Evaluate the callback and build the argv array before forking.
     //

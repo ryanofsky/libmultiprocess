@@ -33,8 +33,14 @@ static auto Spawn(mp::EventLoop& loop, const std::string& process_argv0, const s
     const int fd = mp::SpawnProcess(pid, [&](int fd) -> std::vector<std::string> {
 =======
     mp::ProcessId pid;
+<<<<<<< HEAD
     const int fd = mp::SpawnProcess(pid, [&](int fd) -> std::vector<std::string> {
 >>>>>>> 36c91a0 (util, refactor: Add ProcessId type alias and use it)
+||||||| parent of 94af41b (util, refactor: Add SocketId type alias and use it)
+    const int fd = mp::SpawnProcess(pid, [&](int fd) -> std::vector<std::string> {
+=======
+    const mp::SocketId fd = mp::SpawnProcess(pid, [&](mp::SocketId fd) -> std::vector<std::string> {
+>>>>>>> 94af41b (util, refactor: Add SocketId type alias and use it)
         fs::path path = process_argv0;
         path.remove_filename();
         path.append(new_exe_name);
