@@ -360,7 +360,7 @@ struct ClientException
 template <typename Accessor, typename... Types>
 struct ClientParam
 {
-    ClientParam(Types&&... values) : m_values(values...) {}
+    ClientParam(Types&&... values) : m_values{std::forward<Types>(values)...} {}
 
     struct BuildParams : IterateFieldsHelper<BuildParams, sizeof...(Types)>
     {
@@ -377,7 +377,12 @@ struct ClientParam
         template <size_t I, typename... Args>
         auto callBuild(Args&&... args) -> std::enable_if_t<(I < sizeof...(Types))>
         {
-            callBuild<I + 1>(std::forward<Args>(args)..., std::get<I>(m_client_param->m_values));
+            // Note: The m_values tuple just consists of lvalue and rvalue
+            // references, so calling std::move doesn't change the tuple, it
+            // just choses the std::get overload that returns && instead of &,
+            // so rvalue references are preserved and not turned into lvalue
+            // references.
+            callBuild<I + 1>(std::forward<Args>(args)..., std::get<I>(std::move(m_client_param->m_values)));
         }
 
         template <size_t I, typename Params, typename ParamList, typename... Values>
@@ -574,7 +579,7 @@ void serverDestroy(Server& server)
 //!
 //! ProxyClient<ClassName>::M0::Result ProxyClient<ClassName>::methodName(M0::Param<0> arg0, M0::Param<1> arg1) {
 //!     typename M0::Result result;
-//!     clientInvoke(*this, &InterfaceName::Client::methodNameRequest, MakeClientParam<...>(arg0), MakeClientParam<...>(arg1), MakeClientParam<...>(result));
+//!     clientInvoke(*this, &InterfaceName::Client::methodNameRequest, MakeClientParam<...>(M0::Fwd<0>(arg0)), MakeClientParam<...>(M0::Fwd<1>(arg1)), MakeClientParam<...>(result));
 //!     return result;
 //! }
 //!
