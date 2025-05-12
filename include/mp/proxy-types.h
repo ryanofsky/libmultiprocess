@@ -385,7 +385,7 @@ struct ClientException
 template <typename Accessor, typename... Types>
 struct ClientParam
 {
-    ClientParam(Types&&... values) : m_values(values...) {}
+    ClientParam(Types&&... values) : m_values{std::forward<Types>(values)...} {}
 
     struct BuildParams : IterateFieldsHelper<BuildParams, sizeof...(Types)>
     {
@@ -399,7 +399,52 @@ struct ClientParam
                     ParamList(), Priority<1>(), std::forward<Values>(values)..., Make<StructField, Accessor>(params));
             };
 
+<<<<<<< HEAD
             std::apply(fun, m_client_param->m_values);
+||||||| parent of 9ae79a0 (clang-tidy: Fix bugprone-move-forwarding-reference error)
+        // TODO Possible optimization to speed up compile time:
+        // https://stackoverflow.com/a/7858971 Using enable_if below to check
+        // position when unpacking tuple might be slower than pattern matching
+        // approach in the stack overflow solution
+        template <size_t I, typename... Args>
+        auto callBuild(Args&&... args) -> std::enable_if_t<(I < sizeof...(Types))>
+        {
+            callBuild<I + 1>(std::forward<Args>(args)..., std::get<I>(m_client_param->m_values));
+        }
+
+        template <size_t I, typename Params, typename ParamList, typename... Values>
+        auto callBuild(ClientInvokeContext& invoke_context, Params& params, ParamList, Values&&... values) ->
+            std::enable_if_t<(I == sizeof...(Types))>
+        {
+            MaybeBuildField(std::integral_constant<bool, Accessor::in>(), ParamList(), invoke_context,
+                Make<StructField, Accessor>(params), std::forward<Values>(values)...);
+            MaybeSetWant(
+                ParamList(), Priority<1>(), std::forward<Values>(values)..., Make<StructField, Accessor>(params));
+=======
+        // TODO Possible optimization to speed up compile time:
+        // https://stackoverflow.com/a/7858971 Using enable_if below to check
+        // position when unpacking tuple might be slower than pattern matching
+        // approach in the stack overflow solution
+        template <size_t I, typename... Args>
+        auto callBuild(Args&&... args) -> std::enable_if_t<(I < sizeof...(Types))>
+        {
+            // Note: The m_values tuple just consists of lvalue and rvalue
+            // references, so calling std::move doesn't change the tuple, it
+            // just choses the std::get overload that returns && instead of &,
+            // so rvalue references are preserved and not turned into lvalue
+            // references.
+            callBuild<I + 1>(std::forward<Args>(args)..., std::get<I>(std::move(m_client_param->m_values)));
+        }
+
+        template <size_t I, typename Params, typename ParamList, typename... Values>
+        auto callBuild(ClientInvokeContext& invoke_context, Params& params, ParamList, Values&&... values) ->
+            std::enable_if_t<(I == sizeof...(Types))>
+        {
+            MaybeBuildField(std::integral_constant<bool, Accessor::in>(), ParamList(), invoke_context,
+                Make<StructField, Accessor>(params), std::forward<Values>(values)...);
+            MaybeSetWant(
+                ParamList(), Priority<1>(), std::forward<Values>(values)..., Make<StructField, Accessor>(params));
+>>>>>>> 9ae79a0 (clang-tidy: Fix bugprone-move-forwarding-reference error)
         }
 
         BuildParams(ClientParam* client_param) : m_client_param(client_param) {}
@@ -577,7 +622,7 @@ void serverDestroy(Server& server)
 //!
 //! ProxyClient<ClassName>::M0::Result ProxyClient<ClassName>::methodName(M0::Param<0> arg0, M0::Param<1> arg1) {
 //!     typename M0::Result result;
-//!     clientInvoke(*this, &InterfaceName::Client::methodNameRequest, MakeClientParam<...>(arg0), MakeClientParam<...>(arg1), MakeClientParam<...>(result));
+//!     clientInvoke(*this, &InterfaceName::Client::methodNameRequest, MakeClientParam<...>(M0::Fwd<0>(arg0)), MakeClientParam<...>(M0::Fwd<1>(arg1)), MakeClientParam<...>(result));
 //!     return result;
 //! }
 //!
