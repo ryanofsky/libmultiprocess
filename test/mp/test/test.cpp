@@ -177,6 +177,8 @@ KJ_TEST("Call FooInterface methods")
     mut.message = "init";
     foo->passMutable(mut);
     KJ_EXPECT(mut.message == "init build pass call return read");
+
+    KJ_EXPECT(foo->passFn([]{ return 10; }) == 10);
 }
 
 KJ_TEST("Call IPC method after client connection is closed")
