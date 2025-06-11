@@ -86,6 +86,7 @@ Connection::~Connection()
     // which may call addAsyncCleanup and add more cleanup callbacks which can
     // run below.
     m_rpc_system.reset();
+    m_loop->log() << "&&&& ~Connection RPC system reset";
 
     // ProxyClient cleanup handlers are in sync list, and ProxyServer cleanup
     // handlers are in the async list.
