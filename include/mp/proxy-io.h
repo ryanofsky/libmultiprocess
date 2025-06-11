@@ -477,10 +477,13 @@ ProxyServerBase<Interface, Impl>::~ProxyServerBase()
         // connection is broken). Probably some refactoring of the destructor
         // and invokeDestroy function is possible to make this cleaner and more
         // consistent.
+        m_context.loop->log() << "&&&& ~ProxyServerBase async";
         m_context.connection->addAsyncCleanup([impl=std::move(m_impl), fns=std::move(m_context.cleanup_fns)]() mutable {
             impl.reset();
             CleanupRun(fns);
         });
+    } else {
+        m_context.loop->log() << "&&&& ~ProxyServerBase sync";
     }
     assert(m_context.cleanup_fns.empty());
 }
