@@ -158,6 +158,25 @@ auto PassField(Priority<1>, TypeList<>, ServerContext& server_context, const Fn&
                     << "IPC server error request #" << req << ", missing thread to execute request";
                 throw std::runtime_error("invalid thread handle");
             }
+        }, [&server, req](::kj::Exception&& e) {
+            // Detect when getLocalServer call fails. The serverInvoke function
+            // will print the full exception object after this, but it is worth
+            // printing an additional message here because a failure here is
+            // probably caused by failing to pass a ThreadMap object from the
+            // server to the client before this call. Specifically what happens
+            // if there was not a prior IPC call returning a ThreadMap, is that
+            // the client's Connection::m_thread_map member will be null when
+            // the client is making this IPC, and when it uses
+            // m_thread_map.makeThreadRequest() as part of this IPC, the
+            // makeThread request will appear to succeed due to Cap'n Proto's
+            // request pipelining, but actually return a null Thread::Client
+            // capability, and when that capability is passed to getLocalServer
+            // it will fail with an error here: "(remote):0: failed: remote
+            // exception: Called null capability" that's pretty opaque, so good
+            // to print a more specific message.
+            server.m_context.loop->log()
+                << "IPC server error request #" << req << " CapabilityServerSet<Thread>::getLocalServer call failed, did you forget to provide a ThreadMap to the client prior to this IPC call?";
+            return kj::mv(e);
         })
         // Wait for the invocation to finish before returning to the caller.
         .then([invoke_wait = kj::mv(future.promise)]() mutable { return kj::mv(invoke_wait); });
