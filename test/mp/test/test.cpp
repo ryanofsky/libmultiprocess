@@ -67,8 +67,8 @@ public:
 
               auto client_connection = std::make_unique<Connection>(loop, kj::mv(pipe.ends[1]));
               auto client_proxy = std::make_unique<ProxyClient<messages::FooInterface>>(
-                  client_connection->m_state->rpc_system->bootstrap(ServerVatId().vat_id).castAs<messages::FooInterface>(),
-                  *client_connection, /* destroy_connection= */ client_owns_connection);
+                  client_connection->m_rpc_system->bootstrap(ServerVatId().vat_id).castAs<messages::FooInterface>(),
+                  client_connection.get(), /* destroy_connection= */ client_owns_connection);
               if (client_owns_connection) {
                   client_connection.release();
               } else {

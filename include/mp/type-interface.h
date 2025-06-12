@@ -67,7 +67,7 @@ template <typename Interface, typename Impl>
 std::unique_ptr<Impl> MakeProxyClient(InvokeContext& context, typename Interface::Client&& client)
 {
     return std::make_unique<ProxyClient<Interface>>(
-        std::move(client), context.connection, /* destroy_connection= */ false);
+        std::move(client), &context.connection, /* destroy_connection= */ false);
 }
 
 template <typename Interface, typename Impl>

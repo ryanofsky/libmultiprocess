@@ -68,36 +68,14 @@ public:
     Lock* m_lock{nullptr};
 };
 
-//! Connection smart pointer automatically managing Connection::m_num_refs.
-class ConnectionRef
-{
-public:
-    explicit ConnectionRef(Connection& connection);
-    ConnectionRef(ConnectionRef&& other) noexcept : m_connection{other.m_connection} { other.m_connection = nullptr; }
-    ConnectionRef(const ConnectionRef&) = delete;
-    ConnectionRef& operator=(const ConnectionRef&) = delete;
-    ConnectionRef& operator=(ConnectionRef&&) = delete;
-    ~ConnectionRef() { reset(); }
-    Connection& operator*() const { assert(m_connection); return *m_connection; }
-    Connection* operator->() const { assert(m_connection); return m_connection; }
-    void reset();
-    operator bool() const { return m_connection != nullptr; }
-
-    Connection* m_connection{nullptr};
-};
-
 //! Context data associated with proxy client and server classes.
 struct ProxyContext
 {
-    //! Pointer to associated connection
-    ConnectionRef connection;
-    //! Pointer to event loop.
-    EventLoop* loop;
-    //! List of cleanup functions to call in the ProxyClientBase or
-    //! ProxyServerBase destructor.
+    Connection* connection;
+    EventLoopRef loop;
     CleanupList cleanup_fns;
 
-    ProxyContext(Connection& connection);
+    ProxyContext(Connection* connection);
 };
 
 //! Base class for generated ProxyClient classes that implement a C++ interface
@@ -120,7 +98,7 @@ public:
     //! clients close the connection by freeing the object. It is false for
     //! other client objects so they can be destroyed without affecting the
     //! connection.
-    ProxyClientBase(typename Interface::Client client, Connection& connection, bool destroy_connection);
+    ProxyClientBase(typename Interface::Client client, Connection* connection, bool destroy_connection);
     ~ProxyClientBase() noexcept;
 
     // construct/destroy methods called during client construction/destruction
