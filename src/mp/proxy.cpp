@@ -71,6 +71,7 @@ bool EventLoopRef::reset(Lock* lock)
             loop_lock->unlock();
             char buffer = 0;
             KJ_SYSCALL(write(post_fd, &buffer, 1)); // NOLINT(bugprone-suspicious-semicolon)
+            m_loop->log() << "&&& ref::reset wrote DONE &&&\n\n\n";
         }
         m_loop = nullptr;
     }
@@ -236,10 +237,12 @@ void EventLoop::loop()
         if (read_bytes != 1) throw std::logic_error("EventLoop wait_stream closed unexpectedly");
         Lock lock(m_mutex);
         if (m_post_fn) {
+            log() << "&&& loop got POST wakeup &&&\n\n\n";
             Unlock(lock, *m_post_fn);
             m_post_fn = nullptr;
             m_cv.notify_all();
         } else if (done()) {
+            log() << "&&& loop got DONE wakeup &&&\n\n\n";
             // Intentionally do not break if m_post_fn was set, even if done()
             // would return true, to ensure that the EventLoopRef write(post_fd)
             // call always succeeds and the loop does not exit between the time
@@ -289,11 +292,27 @@ void EventLoop::startAsyncThread()
             Lock lock(m_mutex);
             log() << "\n\n&&& m_async_thread I AM START &&&\n\n\n";
             while (m_async_fns) {
+
+                if (done()) {
+                   log() << "\n\n&&& m_async_thread EARLY DONE &&&\n\n\n";
+                   //break;
+                }
                 if (!m_async_fns->empty()) {
                     EventLoopRef ref{*this, &lock};
                     const std::function<void()> fn = std::move(m_async_fns->front());
                     m_async_fns->pop_front();
                     Unlock(lock, fn);
+                    lock.assert_locked(m_mutex);
+                    assert(ref.m_loop);
+                    log() << "\n\n&&& m_async_thread clients " << m_num_clients << " &&&\n\n\n";
+                    // Important to explictly call ref.reset() here and
+                    // explicitly break if the EventLoop is done, not relying on
+                    // while condition above. Reason is that end of `ref`
+                    // lifetime can cause EventLoop::loop() to exit, and if
+                    // there is external code that immediately deletes the
+                    // EventLoop object as soon as EventLoop::loop() method
+                    // returns, checking the while condition may crash.
+                    if (ref.reset()) break;
                     // Continue without waiting in case there are more async_fns
                     continue;
                 }
