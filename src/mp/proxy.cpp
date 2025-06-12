@@ -79,15 +79,15 @@ bool EventLoopRef::reset(Lock* lock)
 
 ProxyContext::ProxyContext(Connection& connection) : connection(connection), loop{connection.m_loop.m_loop} {}
 
-ConnectionState::ConnectionState(Connection& connection, Stream&& stream_)
+ConnectedState::ConnectedState(Connection& connection, Stream&& stream_)
     : error_handler{*connection.m_loop}, stream(kj::mv(stream_)),
         network(*stream, Side::CLIENT, capnp::ReaderOptions()),
         rpc_system(capnp::makeRpcClient(network)) {}
 
-ConnectionState::ConnectionState(Connection& connection, Stream&& stream_, const std::function<capnp::Capability::Client(ConnectionState&)>& make_client)
+ConnectedState::ConnectedState(Connection& connection, Stream&& stream_, const std::function<capnp::Capability::Client(Connection&)>& make_client)
     : error_handler{*connection.m_loop}, stream(kj::mv(stream_)),
         network(*stream, Side::SERVER, capnp::ReaderOptions()),
-        rpc_system(capnp::makeRpcServer(network, make_client(*this))) {}
+        rpc_system(capnp::makeRpcServer(network, make_client(connection))) {}
 
 ConnectionRef::ConnectionRef(Connection& connection) : m_connection{&connection}
 {
@@ -113,13 +113,12 @@ Connection::~Connection()
     m_loop.reset(&lock);
 }
 
-void Connection::disconnect(std::function<void()> delete_fn)
+void Connection::disconnect()
 {
-    assert(std::this_thread::get_id() == m_loop.m_thread_id);
-
-    m_delete_fn = std::move(delete_fn);
+    assert(std::this_thread::get_id() == m_loop->m_thread_id);
 
     ConnectionRef ref{*this};
+    ConnectedState state{std::move(m_state)};
 
     // Shut down RPC system first, since this will garbage collect Server
     // objects that were not freed before the connection was closed, some of
@@ -192,18 +191,25 @@ CleanupIt Connection::addSyncCleanup(std::function<void()> fn)
     // synchronously in a single batch when the connection is broken, and they
     // only reset the connection pointers in the client objects without actually
     // deleting the client objects.
-    return m_state->sync_cleanup_fns.emplace(m_state->sync_cleanup_fns.begin(), std::move(fn));
+    assert(state());
+    CleanupList& fns(state()->sync_cleanup_fns);
+    return fns.emplace(fns.begin(), std::move(fn));
 }
 
 void Connection::removeSyncCleanup(CleanupIt it)
 {
     const Lock lock(m_loop->m_mutex);
-    m_state->sync_cleanup_fns.erase(it);
+    assert(state());
+    state()->sync_cleanup_fns.erase(it);
 }
 
-void Connection::addAsyncCleanup(std::function<void()> fn)
+bool Connection::addAsyncCleanup(std::function<void()>& fn)
 {
-    const Lock lock(m_loop->m_mutex);
+    assert(std::this_thread::get_id() == m_loop->m_thread_id);
+
+    if (!dstate()) return false;
+    CleanupList& fns(dstate()->async_cleanup_fns);
+
     // Add async cleanup callbacks to the back of the list. Unlike the sync
     // cleanup list, this list order is more significant because it determines
     // the order server objects are destroyed when there is a sudden disconnect,
@@ -220,7 +226,8 @@ void Connection::addAsyncCleanup(std::function<void()> fn)
     // process, otherwise shared pointer counts of the CWallet objects (which
     // inherit from Chain::Notification) will not be 1 when WalletLoader
     // destructor runs and it will wait forever for them to be released.
-    m_state->async_cleanup_fns.emplace(m_state->async_cleanup_fns.end(), std::move(fn));
+    fns.emplace(fns.end(), std::move(fn));
+    return true;
 }
 
 EventLoop::EventLoop(const char* exe_name, LogFn log_fn, void* context)

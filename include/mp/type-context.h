@@ -92,7 +92,7 @@ auto PassField(Priority<1>, TypeList<>, ServerContext& server_context, const Fn&
                     auto& request_threads = thread_context.request_threads;
                     auto [request_thread, inserted]{SetThread(
                         request_threads, thread_context.waiter->m_mutex,
-                        server.m_context.connection,
+                        &*server.m_context.connection,
                         [&] { return context_arg.getCallbackThread(); })};
 
                     // If an entry was inserted into the requests_threads map,
@@ -113,9 +113,9 @@ auto PassField(Priority<1>, TypeList<>, ServerContext& server_context, const Fn&
                         // ProxyServer<Thread> destructor calls
                         // request_threads.clear().
                         if (erase_thread) {
-                            disconnected = !request_threads.erase(server.m_context.connection);
+                            disconnected = !request_threads.erase(&*server.m_context.connection);
                         } else {
-                            disconnected = !request_threads.count(server.m_context.connection);
+                            disconnected = !request_threads.count(&*server.m_context.connection);
                         }
                     });
                     fn.invoke(server_context, args...);
@@ -148,7 +148,7 @@ auto PassField(Priority<1>, TypeList<>, ServerContext& server_context, const Fn&
     // be a local Thread::Server object, but it needs to be looked up
     // asynchronously with getLocalServer().
     auto thread_client = context_arg.getThread();
-    return server.m_context.connection->m_threads.getLocalServer(thread_client)
+    return server.m_context.connection->m_state->threads.getLocalServer(thread_client)
         .then([&server, invoke = kj::mv(invoke), req](const kj::Maybe<Thread::Server&>& perhaps) mutable {
             // Assuming the thread object is found, pass it a pointer to the
             // `invoke` lambda above which will invoke the function on that
