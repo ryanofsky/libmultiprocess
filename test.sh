@@ -40,7 +40,7 @@ cd build
 
 # use prefixed capnp or use ubuntu system capnp
 if test -z "$S"; then
-CC=clang CXX=clang++ cmake -DCMAKE_INSTALL_PREFIX=$HOME/work/mp/build/prefix -DCapnProto_DEBUG=1 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-Werror -ftemplate-backtrace-limit=0" -DMULTIPROCESS_RUN_CLANG_TIDY=1 ..
+CC=clang CXX=clang++ cmake -DCMAKE_INSTALL_PREFIX=$HOME/work/mp/build/prefix -DCapnProto_DEBUG=1 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-Werror -ftemplate-backtrace-limit=0 -fsanitize=address" -DMULTIPROCESS_RUN_CLANG_TIDY=1 ..
 #--debug-trycompile
 make -j12 check install example mptests mpexamples
 #make VERBOSE=1
