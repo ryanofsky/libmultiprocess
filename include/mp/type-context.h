@@ -26,7 +26,7 @@ void CustomBuildField(TypeList<>,
     // future calls over this connection can reuse it.
     auto [callback_thread, _]{SetThread(
         thread_context.callback_threads, thread_context.waiter->m_mutex, &connection,
-        [&] { return connection.m_threads.add(kj::heap<ProxyServer<Thread>>(thread_context, std::thread{})); })};
+        [&] { return connection.m_state->threads.add(kj::heap<ProxyServer<Thread>>(thread_context, std::thread{})); })};
 
     // Call remote ThreadMap.makeThread function so server will create a
     // dedicated worker thread to run function calls from this thread. Store the
@@ -38,7 +38,7 @@ void CustomBuildField(TypeList<>,
         // all if the current thread is a request thread created for a different
         // IPC client, because in that case PassField code (below) will have set
         // request_thread to point to the calling thread.
-        auto request = connection.m_thread_map.makeThreadRequest();
+        auto request = connection.m_state->thread_map.makeThreadRequest();
         request.setName(thread_context.thread_name);
         return request.send().getResult(); // Nonblocking due to capnp request pipelining.
     }};
@@ -92,7 +92,7 @@ auto PassField(Priority<1>, TypeList<>, ServerContext& server_context, const Fn&
                     auto& request_threads = thread_context.request_threads;
                     auto [request_thread, inserted]{SetThread(
                         request_threads, thread_context.waiter->m_mutex,
-                        server.m_context.connection,
+                        &*server.m_context.connection,
                         [&] { return context_arg.getCallbackThread(); })};
 
                     // If an entry was inserted into the requests_threads map,
@@ -113,9 +113,9 @@ auto PassField(Priority<1>, TypeList<>, ServerContext& server_context, const Fn&
                         // ProxyServer<Thread> destructor calls
                         // request_threads.clear().
                         if (erase_thread) {
-                            disconnected = !request_threads.erase(server.m_context.connection);
+                            disconnected = !request_threads.erase(&*server.m_context.connection);
                         } else {
-                            disconnected = !request_threads.count(server.m_context.connection);
+                            disconnected = !request_threads.count(&*server.m_context.connection);
                         }
                     });
                     fn.invoke(server_context, args...);
@@ -148,7 +148,7 @@ auto PassField(Priority<1>, TypeList<>, ServerContext& server_context, const Fn&
     // be a local Thread::Server object, but it needs to be looked up
     // asynchronously with getLocalServer().
     auto thread_client = context_arg.getThread();
-    return server.m_context.connection->m_threads.getLocalServer(thread_client)
+    return server.m_context.connection->m_state->threads.getLocalServer(thread_client)
         .then([&server, invoke = kj::mv(invoke), req](const kj::Maybe<Thread::Server&>& perhaps) mutable {
             // Assuming the thread object is found, pass it a pointer to the
             // `invoke` lambda above which will invoke the function on that
