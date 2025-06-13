@@ -250,10 +250,12 @@ KJ_TEST("Calling IPC method, disconnecting and blocking during the call")
     // an asynchronous thread instead of executing in the event loop thread, so
     // it is able to block without deadlocking the event lock thread.
     //
-    // This test currently hangs or crashes due to bug
-    // https://github.com/bitcoin-core/libmultiprocess/issues/182 because the
-    // server Connection object is destroyed here before ProxyServer object, and
-    // the ProxyServerBase destructor accessed it after it was destroyed.
+    // This test adds important coverage because it causes the server Connection
+    // object to be destroyed before ProxyServer object, which is not a
+    // condition that usually happens because the m_rpc_system.reset() call in
+    // the ~Connection destructor usually would immediately free all remaing
+    // ProxyServer objects associated with the connection. Having an in-progress
+    // RPC call requires keeping the ProxyServer longer.
 
     TestSetup setup{/*client_owns_connection=*/false};
     ProxyClient<messages::FooInterface>* foo = setup.client.get();

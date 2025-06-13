@@ -38,22 +38,14 @@ rm -rvf build
 mkdir -p build
 cd build
 
-# use prefixed capnp or use ubuntu system capnp
-if test -z "$S"; then
-CC=clang CXX=clang++ cmake -DCMAKE_INSTALL_PREFIX=$HOME/work/mp/build/prefix -DCapnProto_DEBUG=1 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-Werror -ftemplate-backtrace-limit=0 -fsanitize=address" -DMULTIPROCESS_RUN_CLANG_TIDY=1 ..
+MP_CXX_FLAGS="-Werror -ftemplate-backtrace-limit=0 -fsanitize=address"
+MP_CXX_FLAGS="-Werror -ftemplate-backtrace-limit=0"
+
+CC=clang CXX=clang++ cmake -DCMAKE_INSTALL_PREFIX=$HOME/work/mp/build/prefix -DCapnProto_DEBUG=1 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="$MP_CXX_FLAGS" -DMULTIPROCESS_RUN_CLANG_TIDY=1 ..
 #--debug-trycompile
 make -j12 check install example mptests mpexamples
 #make VERBOSE=1
 #make -j12 mptest && gdb -ex run --args build/mptest
 #make -j12 all mptest test install
-else
 
-unset LD_LIBRARY_PATH
-unset PKG_CONFIG_PATH
-PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-cmake -DCMAKE_INSTALL_PREFIX=$HOME/work/mp/build/prefix ..
-ln -sv lib64 ~/work/mp/build/prefix/lib
-make VERBOSE=1 all test install mptests mpexamples
-
-fi
 #find $HOME/work/mp/build/prefix -type f

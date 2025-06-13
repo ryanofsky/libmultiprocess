@@ -69,9 +69,9 @@ void EventLoopRef::reset(bool relock)
             loop_lock->unlock();
             char buffer = 0;
             KJ_SYSCALL(write(post_fd, &buffer, 1)); // NOLINT(bugprone-suspicious-semicolon)
-            // By default, do not try to relock the event loop mutex after
-            // signaling the done condition, because the event loop could wake
-            // up and destroy itself and the mutex might no longer exist.
+            // By default, do not try to relock `loop_lock` after writing,
+            // because the event loop could wake up and destroy itself and the
+            // mutex might no longer exist.
             if (relock) loop_lock->lock();
         }
         m_loop = nullptr;
@@ -278,7 +278,7 @@ void EventLoop::startAsyncThread()
 {
     assert (std::this_thread::get_id() == m_thread_id);
     if (m_async_thread.joinable()) {
-        // If thread is already started, needs to be woken up.
+        // Notify to wake up the async thread if it is already running.
         m_cv.notify_all();
     } else if (!m_async_fns->empty()) {
         m_async_thread = std::thread([this] {
