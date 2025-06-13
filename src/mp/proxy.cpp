@@ -56,38 +56,42 @@ EventLoopRef::EventLoopRef(EventLoop& loop, Lock* lock) : m_loop(&loop), m_lock(
     m_loop->m_num_clients += 1;
 }
 
-bool EventLoopRef::reset(Lock* lock)
+void EventLoopRef::reset(bool relock)
 {
-    bool done = false;
     if (m_loop) {
-        auto loop_lock{PtrOrValue{lock ? lock : m_lock, m_loop->m_mutex}};
+        auto loop_lock{PtrOrValue{m_lock, m_loop->m_mutex}};
         loop_lock->assert_locked(m_loop->m_mutex);
         assert(m_loop->m_num_clients > 0);
         m_loop->m_num_clients -= 1;
         if (m_loop->done()) {
-            done = true;
             m_loop->m_cv.notify_all();
             int post_fd{m_loop->m_post_fd};
             loop_lock->unlock();
             char buffer = 0;
             KJ_SYSCALL(write(post_fd, &buffer, 1)); // NOLINT(bugprone-suspicious-semicolon)
-            m_loop->log() << "&&& ref::reset wrote DONE &&&\n\n\n";
+            // By default, do not try to relock the event loop mutex after
+            // signaling the done condition, because the event loop could wake
+            // up and destroy itself and the mutex might no longer exist.
+            if (relock) loop_lock->lock();
         }
         m_loop = nullptr;
     }
-    return done;
 }
 
 ProxyContext::ProxyContext(Connection* connection) : connection(connection), loop{*connection->m_loop} {}
 
 Connection::~Connection()
 {
-    // Shut down RPC system first, since this will garbage collect Server
-    // objects that were not freed before the connection was closed, some of
-    // which may call addAsyncCleanup and add more cleanup callbacks which can
-    // run below.
+    // Shut down RPC system first, since this will garbage collect any
+    // ProxyServer objects that were not freed before the connection was closed.
+    // Typically all ProxyServer objects associated with this connection will be
+    // freed before this call returns. However that will not be the case if
+    // there are asynchronous IPC calls over this connection still currently
+    // executier that will not be the case if there are asynchronous IPC calls
+    // over this connection still currently executing. In that case Cap'n Proto
+    // will destroy the ProxyServer objects after the calls finish executing and
+    // try to send their responses.
     m_rpc_system.reset();
-    m_loop->log() << "&&&& ~Connection RPC system reset";
 
     // ProxyClient cleanup handlers are in sync list, and ProxyServer cleanup
     // handlers are in the async list.
@@ -135,14 +139,6 @@ Connection::~Connection()
         m_sync_cleanup_fns.front()();
         m_sync_cleanup_fns.pop_front();
     }
-    while (!m_async_cleanup_fns.empty()) {
-        const Lock lock(m_loop->m_mutex);
-        m_loop->m_async_fns->emplace_back(std::move(m_async_cleanup_fns.front()));
-        m_async_cleanup_fns.pop_front();
-    }
-    Lock lock(m_loop->m_mutex);
-    m_loop->startAsyncThread();
-    m_loop.reset(&lock);
 }
 
 CleanupIt Connection::addSyncCleanup(std::function<void()> fn)
@@ -165,9 +161,9 @@ void Connection::removeSyncCleanup(CleanupIt it)
     m_sync_cleanup_fns.erase(it);
 }
 
-void Connection::addAsyncCleanup(std::function<void()> fn)
+void EventLoop::addAsyncCleanup(std::function<void()> fn)
 {
-    const Lock lock(m_loop->m_mutex);
+    const Lock lock(m_mutex);
     // Add async cleanup callbacks to the back of the list. Unlike the sync
     // cleanup list, this list order is more significant because it determines
     // the order server objects are destroyed when there is a sudden disconnect,
@@ -184,7 +180,8 @@ void Connection::addAsyncCleanup(std::function<void()> fn)
     // process, otherwise shared pointer counts of the CWallet objects (which
     // inherit from Chain::Notification) will not be 1 when WalletLoader
     // destructor runs and it will wait forever for them to be released.
-    m_async_cleanup_fns.emplace(m_async_cleanup_fns.end(), std::move(fn));
+    m_async_fns->emplace_back(std::move(fn));
+    startAsyncThread();
 }
 
 EventLoop::EventLoop(const char* exe_name, LogFn log_fn, void* context)
@@ -202,7 +199,6 @@ EventLoop::EventLoop(const char* exe_name, LogFn log_fn, void* context)
 
 EventLoop::~EventLoop()
 {
-    log() << "\n\n&&& ~EventLoop " << (m_async_thread.joinable()) << "&&&\n\n\n";
     if (m_async_thread.joinable()) m_async_thread.join();
     const Lock lock(m_mutex);
     KJ_ASSERT(m_post_fn == nullptr);
@@ -237,12 +233,10 @@ void EventLoop::loop()
         if (read_bytes != 1) throw std::logic_error("EventLoop wait_stream closed unexpectedly");
         Lock lock(m_mutex);
         if (m_post_fn) {
-            log() << "&&& loop got POST wakeup &&&\n\n\n";
             Unlock(lock, *m_post_fn);
             m_post_fn = nullptr;
             m_cv.notify_all();
         } else if (done()) {
-            log() << "&&& loop got DONE wakeup &&&\n\n\n";
             // Intentionally do not break if m_post_fn was set, even if done()
             // would return true, to ensure that the EventLoopRef write(post_fd)
             // call always succeeds and the loop does not exit between the time
@@ -284,41 +278,24 @@ void EventLoop::startAsyncThread()
 {
     assert (std::this_thread::get_id() == m_thread_id);
     if (m_async_thread.joinable()) {
-        // If thread is already started, needs to be woken up (better name for
-        // this method might be startOrNotifyAsyncThread)
+        // If thread is already started, needs to be woken up.
         m_cv.notify_all();
     } else if (!m_async_fns->empty()) {
         m_async_thread = std::thread([this] {
             Lock lock(m_mutex);
-            log() << "\n\n&&& m_async_thread I AM START &&&\n\n\n";
             while (m_async_fns) {
-
-                if (done()) {
-                   log() << "\n\n&&& m_async_thread EARLY DONE &&&\n\n\n";
-                   //break;
-                }
                 if (!m_async_fns->empty()) {
                     EventLoopRef ref{*this, &lock};
                     const std::function<void()> fn = std::move(m_async_fns->front());
                     m_async_fns->pop_front();
                     Unlock(lock, fn);
-                    lock.assert_locked(m_mutex);
-                    assert(ref.m_loop);
-                    log() << "\n\n&&& m_async_thread clients " << m_num_clients << " &&&\n\n\n";
-                    // Important to explictly call ref.reset() here and
-                    // explicitly break if the EventLoop is done, not relying on
-                    // while condition above. Reason is that end of `ref`
-                    // lifetime can cause EventLoop::loop() to exit, and if
-                    // there is external code that immediately deletes the
-                    // EventLoop object as soon as EventLoop::loop() method
-                    // returns, checking the while condition may crash.
-                    if (ref.reset()) break;
+                    // Important to relock because of the wait() call below.
+                    ref.reset(/*relock=*/true);
                     // Continue without waiting in case there are more async_fns
                     continue;
                 }
                 m_cv.wait(lock.m_lock);
             }
-            log() << "\n\n&&& m_async_thread I AM DONE &&&\n\n\n";
         });
     }
 }

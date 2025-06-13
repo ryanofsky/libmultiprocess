@@ -74,11 +74,7 @@ public:
               if (client_owns_connection) {
                   client_connection.release();
               } else {
-                  client_disconnect = [&] { loop.sync([&] {
-                      loop.log() << "&&&& starting client_connection.reset()";
-                      client_connection.reset();
-                      loop.log() << "&&&& done client_connection.reset()";
-                  }); };
+                  client_disconnect = [&] { loop.sync([&] { client_connection.reset(); }); };
               }
 
               client_promise.set_value(std::move(client_proxy));
@@ -243,7 +239,6 @@ KJ_TEST("Calling IPC method and disconnecting during the call")
 
 KJ_TEST("Calling IPC method, disconnecting and blocking during the call")
 {
-    if constexpr (1) return ;
     // This test is similar to last test, except that instead of letting the IPC
     // call return immediately after triggering a disconnect, make it disconnect
     // & wait so server is forced to deal with having a disconnection and call
@@ -268,11 +263,8 @@ KJ_TEST("Calling IPC method, disconnecting and blocking during the call")
     std::promise<void> signal;
     setup.server->m_impl->m_fn = [&] {
         EventLoopRef loop{*setup.server->m_context.loop};
-        loop->log() << "|||| Server about to disconnect";
         setup.client_disconnect();
-        loop->log() << "|||| Server disconnected";
         signal.get_future().get();
-        loop->log() << "|||| Server returned";
     };
 
     bool disconnected{false};
@@ -284,9 +276,7 @@ KJ_TEST("Calling IPC method, disconnecting and blocking during the call")
     }
     KJ_EXPECT(disconnected);
 
-    std::cout << ">>>> Signalling server to return.\n";
     signal.set_value();
-    std::cout << ">>>> Waiting for disconnect.\n";
 }
 
 } // namespace test
