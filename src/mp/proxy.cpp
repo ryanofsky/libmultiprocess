@@ -78,10 +78,49 @@ void EventLoopRef::reset(bool relock)
     }
 }
 
-ProxyContext::ProxyContext(Connection* connection) : connection(connection), loop{*connection->m_loop} {}
+ProxyContext::ProxyContext(Connection& connection) : connection(connection), loop{connection.m_loop.m_loop} {}
+
+ConnectedState::ConnectedState(Connection& connection, Stream&& stream_)
+    : error_handler{*connection.m_loop}, stream(kj::mv(stream_)),
+        network(*stream, Side::CLIENT, capnp::ReaderOptions()),
+        rpc_system(capnp::makeRpcClient(network)) {}
+
+ConnectedState::ConnectedState(Connection& connection, Stream&& stream_, const std::function<capnp::Capability::Client(Connection&)>& make_client)
+    : error_handler{*connection.m_loop}, stream(kj::mv(stream_)),
+        network(*stream, Side::SERVER, capnp::ReaderOptions()),
+        rpc_system(capnp::makeRpcServer(network, make_client(connection))) {}
+
+ConnectionRef::ConnectionRef(Connection& connection) : m_connection{&connection}
+{
+    Lock lock(m_connection->m_loop->m_mutex);
+    m_connection->m_num_refs += 1;
+}
+
+void ConnectionRef::reset()
+{
+    if (!m_connection) return;
+    Lock lock(m_connection->m_loop->m_mutex);
+    if (--m_connection->m_num_refs == 0) {
+        auto delete_fn{std::move(m_connection->m_delete_fn)};
+        lock.unlock();
+        if (delete_fn) delete_fn();
+    }
+}
 
 Connection::~Connection()
 {
+    Lock lock(m_loop->m_mutex);
+    m_loop->m_cv.wait(lock.m_lock, [&]{ return m_num_refs == 0; });
+    m_loop.reset(&lock);
+}
+
+void Connection::disconnect()
+{
+    assert(std::this_thread::get_id() == m_loop->m_thread_id);
+
+    ConnectionRef ref{*this};
+    ConnectedState state{std::move(m_state)};
+
     // Shut down RPC system first, since this will garbage collect any
     // ProxyServer objects that were not freed before the connection was closed.
     // Typically all ProxyServer objects associated with this connection will be
@@ -91,10 +130,10 @@ Connection::~Connection()
     // over this connection still currently executing. In that case Cap'n Proto
     // will destroy the ProxyServer objects after the calls finish executing and
     // try to send their responses.
-    m_rpc_system.reset();
+    m_state->rpc_system.reset();
 
-    // ProxyClient cleanup handlers are in sync list, and ProxyServer cleanup
-    // handlers are in the async list.
+    // ProxyClient cleanup handlers are in the sync list, and ProxyServer
+    // cleanup handlers are in the async list.
     //
     // The ProxyClient cleanup handlers are synchronous because they are fast
     // and don't do anything besides release capnp resources and reset state so
@@ -105,7 +144,7 @@ Connection::~Connection()
     // out of scope or trigger obscure capnp i/o errors.
     //
     // The ProxySever cleanup handlers call user defined destructors on server
-    // object, which can run arbitrary blocking bitcoin code so they have to run
+    // objects, which can run arbitrary blocking bitcoin code so they have to run
     // asynchronously in a different thread. The asynchronous cleanup functions
     // intentionally aren't started until after the synchronous cleanup
     // functions run, so client objects are fully disconnected before bitcoin
@@ -123,8 +162,7 @@ Connection::~Connection()
     // callback.
     //
     // On incoming side of the connection, the onDisconnect callback is written
-    // to delete the Connection object from the m_incoming_connections and call
-    // this destructor which calls Connection::disconnect.
+    // to call Connection::cleanup() which calls Connection::disconnect.
     //
     // On the outgoing side, the Connection object is owned by top level client
     // object client, which onDisconnect handler doesn't have ready access to,
@@ -135,10 +173,17 @@ Connection::~Connection()
     // on clean and unclean shutdowns. In unclean shutdown case when the
     // connection is broken, sync and async cleanup lists will filled with
     // callbacks. In the clean shutdown case both lists will be empty.
-    while (!m_sync_cleanup_fns.empty()) {
-        m_sync_cleanup_fns.front()();
-        m_sync_cleanup_fns.pop_front();
+    while (!m_state->sync_cleanup_fns.empty()) {
+        m_state->sync_cleanup_fns.front()();
+        m_state->sync_cleanup_fns.pop_front();
     }
+    while (!m_state->async_cleanup_fns.empty()) {
+        const Lock lock(m_loop->m_mutex);
+        m_loop->m_async_fns.emplace_back(std::move(m_state->async_cleanup_fns.front()));
+        m_state->async_cleanup_fns.pop_front();
+    }
+    m_loop->startAsyncThread();
+    m_state.reset();
 }
 
 CleanupIt Connection::addSyncCleanup(std::function<void()> fn)
@@ -152,18 +197,25 @@ CleanupIt Connection::addSyncCleanup(std::function<void()> fn)
     // synchronously in a single batch when the connection is broken, and they
     // only reset the connection pointers in the client objects without actually
     // deleting the client objects.
-    return m_sync_cleanup_fns.emplace(m_sync_cleanup_fns.begin(), std::move(fn));
+    assert(state());
+    CleanupList& fns(state()->sync_cleanup_fns);
+    return fns.emplace(fns.begin(), std::move(fn));
 }
 
 void Connection::removeSyncCleanup(CleanupIt it)
 {
     const Lock lock(m_loop->m_mutex);
-    m_sync_cleanup_fns.erase(it);
+    assert(state());
+    state()->sync_cleanup_fns.erase(it);
 }
 
-void EventLoop::addAsyncCleanup(std::function<void()> fn)
+bool Connection::addAsyncCleanup(std::function<void()>& fn)
 {
-    const Lock lock(m_mutex);
+    assert(std::this_thread::get_id() == m_loop->m_thread_id);
+
+    if (!dstate()) return false;
+    CleanupList& fns(dstate()->async_cleanup_fns);
+
     // Add async cleanup callbacks to the back of the list. Unlike the sync
     // cleanup list, this list order is more significant because it determines
     // the order server objects are destroyed when there is a sudden disconnect,
@@ -180,8 +232,8 @@ void EventLoop::addAsyncCleanup(std::function<void()> fn)
     // process, otherwise shared pointer counts of the CWallet objects (which
     // inherit from Chain::Notification) will not be 1 when WalletLoader
     // destructor runs and it will wait forever for them to be released.
-    m_async_fns->emplace_back(std::move(fn));
-    startAsyncThread();
+    fns.emplace(fns.end(), std::move(fn));
+    return true;
 }
 
 EventLoop::EventLoop(const char* exe_name, LogFn log_fn, void* context)
@@ -313,7 +365,7 @@ std::tuple<ConnThread, bool> SetThread(ConnThreads& threads, std::mutex& mutex, 
     if (thread != threads.end()) return {thread, false};
     thread = threads.emplace(
         std::piecewise_construct, std::forward_as_tuple(connection),
-        std::forward_as_tuple(make_thread(), connection, /* destroy_connection= */ false)).first;
+        std::forward_as_tuple(make_thread(), *connection, /* destroy_connection= */ false)).first;
     thread->second.setCleanup([&threads, &mutex, thread] {
         // Note: it is safe to use the `thread` iterator in this cleanup
         // function, because the iterator would only be invalid if the map entry
@@ -405,7 +457,7 @@ kj::Promise<void> ProxyServer<ThreadMap>::makeThread(MakeThreadContext context)
         g_thread_context.waiter->wait(lock, [] { return !g_thread_context.waiter; });
     });
     auto thread_server = kj::heap<ProxyServer<Thread>>(*thread_context.get_future().get(), std::move(thread));
-    auto thread_client = m_connection.m_threads.add(kj::mv(thread_server));
+    auto thread_client = m_connection.m_state->threads.add(kj::mv(thread_server));
     context.getResults().setResult(kj::mv(thread_client));
     return kj::READY_NOW;
 }
