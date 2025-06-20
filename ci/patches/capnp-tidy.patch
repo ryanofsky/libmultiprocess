@@ -1,0 +1,12 @@
+diff --git a/c++/src/kj/async-inl.h b/c++/src/kj/async-inl.h
+index fc8a9813..dd0c43bb 100644
+--- a/c++/src/kj/async-inl.h
++++ b/c++/src/kj/async-inl.h
+@@ -606,6 +606,7 @@ class PtmfHelper {
+     if (voff & 1) {
+       voff &= ~1;
+ #endif
++      // NOLINTNEXTLINE(clang-analyzer-core.UndefinedBinaryOperatorResult)
+       return *(void**)(*(char**)obj + voff);
+     } else {
+       return ptr;
