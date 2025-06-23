@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -euxo pipefail
 
 ctest --test-dir build --output-on-failure

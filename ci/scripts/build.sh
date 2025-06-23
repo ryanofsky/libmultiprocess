@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -euxo pipefail
 
 cmake --build build -t all tests mpexamples -- -k 0
