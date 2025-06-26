@@ -16,9 +16,20 @@ All CI is just bash and nix.
 To run jobs locally:
 
 ```bash
+<<<<<<< HEAD
 CI_CONFIG=ci/configs/default.bash ci/scripts/run.sh
 CI_CONFIG=ci/configs/llvm.bash    ci/scripts/run.sh
 CI_CONFIG=ci/configs/gnu32.bash   ci/scripts/run.sh
+||||||| parent of 1ff5ad1 (ci: add thread sanitizer job)
+CI_CONFIG=ci/configs/default.sh ci/scripts/run.sh
+CI_CONFIG=ci/configs/llvm.sh    ci/scripts/run.sh
+CI_CONFIG=ci/configs/gnu32.sh   ci/scripts/run.sh
+=======
+CI_CONFIG=ci/configs/default.sh ci/scripts/run.sh
+CI_CONFIG=ci/configs/llvm.sh    ci/scripts/run.sh
+CI_CONFIG=ci/configs/gnu32.sh   ci/scripts/run.sh
+CI_CONFIG=ci/configs/tsan.sh    ci/scripts/run.sh
+>>>>>>> 1ff5ad1 (ci: add thread sanitizer job)
 ```
 
 By default CI jobs will reuse their build directories. `CI_CLEAN=1` can be specified to delete them before running instead.
