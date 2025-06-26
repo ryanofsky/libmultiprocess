@@ -58,8 +58,8 @@ EventLoopRef::EventLoopRef(EventLoop& loop, Lock* lock) : m_loop(&loop), m_lock(
 void EventLoopRef::reset(bool relock) MP_NO_TSA
 {
     if (auto* loop{m_loop}) {
-        m_loop = nullptr;
         auto loop_lock{PtrOrValue{m_lock, loop->m_mutex}};
+        m_loop = nullptr;
         loop_lock->assert_locked(loop->m_mutex);
         assert(loop->m_num_clients > 0);
         loop->m_num_clients -= 1;
@@ -138,9 +138,9 @@ Connection::~Connection()
     }
 }
 
-CleanupIt Connection::addSyncCleanup(std::function<void()> fn)
+CleanupIt Connection::addSyncCleanup(std::function<void()> fn, const Lock& lock)
 {
-    const Lock lock(m_loop->m_mutex);
+    lock.assert_locked(m_loop->m_mutex);
     // Add cleanup callbacks to the front of list, so sync cleanup functions run
     // in LIFO order. This is a good approach because sync cleanup functions are
     // added as client objects are created, and it is natural to clean up
@@ -152,9 +152,9 @@ CleanupIt Connection::addSyncCleanup(std::function<void()> fn)
     return m_sync_cleanup_fns.emplace(m_sync_cleanup_fns.begin(), std::move(fn));
 }
 
-void Connection::removeSyncCleanup(CleanupIt it)
+void Connection::removeSyncCleanup(CleanupIt it, const Lock& lock)
 {
-    const Lock lock(m_loop->m_mutex);
+    lock.assert_locked(m_loop->m_mutex);
     m_sync_cleanup_fns.erase(it);
 }
 
@@ -320,9 +320,9 @@ std::tuple<ConnThread, bool> SetThread(ConnThreads& threads, std::mutex& mutex, 
         // Connection is being destroyed before thread client is, so reset
         // thread client m_cleanup_it member so thread client destructor does not
         // try unregister this callback after connection is destroyed.
-        thread->second.m_cleanup_it.reset();
         // Remove connection pointer about to be destroyed from the map
         const std::unique_lock<std::mutex> lock(mutex);
+        thread->second.m_cleanup_it.reset();
         threads.erase(thread);
     });
     return {thread, true};
@@ -333,16 +333,18 @@ ProxyClient<Thread>::~ProxyClient()
     // If thread is being destroyed before connection is destroyed, remove the
     // cleanup callback that was registered to handle the connection being
     // destroyed before the thread being destroyed.
+    Lock lock{m_context.loop->m_mutex};
     if (m_cleanup_it) {
-        m_context.connection->removeSyncCleanup(*m_cleanup_it);
+        m_context.connection->removeSyncCleanup(*m_cleanup_it, lock);
     }
 }
 
 void ProxyClient<Thread>::setCleanup(const std::function<void()>& fn)
 {
     assert(fn);
+    Lock lock{m_context.loop->m_mutex};
     assert(!m_cleanup_it);
-    m_cleanup_it = m_context.connection->addSyncCleanup(fn);
+    m_cleanup_it = m_context.connection->addSyncCleanup(fn, lock);
 }
 
 ProxyServer<Thread>::ProxyServer(ThreadContext& thread_context, std::thread&& thread)

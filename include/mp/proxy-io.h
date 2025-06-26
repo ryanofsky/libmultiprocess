@@ -332,8 +332,8 @@ public:
     //! Register synchronous cleanup function to run on event loop thread (with
     //! access to capnp thread local variables) when disconnect() is called.
     //! any new i/o.
-    CleanupIt addSyncCleanup(std::function<void()> fn);
-    void removeSyncCleanup(CleanupIt it);
+    CleanupIt addSyncCleanup(std::function<void()> fn, const Lock& lock);
+    void removeSyncCleanup(CleanupIt it, const Lock& lock);
 
     //! Add disconnect handler.
     template <typename F>
@@ -393,13 +393,17 @@ ProxyClientBase<Interface, Impl>::ProxyClientBase(typename Interface::Client cli
 
 {
     // Handler for the connection getting destroyed before this client object.
-    auto cleanup_it = m_context.connection->addSyncCleanup([this]() {
+    auto cleanup_it = [&]{
+        Lock lock{m_context.loop->m_mutex};
+        return m_context.connection->addSyncCleanup([this]() {
+        assert (std::this_thread::get_id() == m_context.loop->m_thread_id);
         // Release client capability by move-assigning to temporary.
         {
             typename Interface::Client(std::move(m_client));
         }
+        Lock lock{m_context.loop->m_mutex};
         m_context.connection = nullptr;
-    });
+    }, lock);}();
 
     // Two shutdown sequences are supported:
     //
@@ -413,10 +417,15 @@ ProxyClientBase<Interface, Impl>::ProxyClientBase(typename Interface::Client cli
     // second case is handled by the cleanup function, which sets m_context.connection to
     // null so nothing happens here.
     m_context.cleanup_fns.emplace_front([this, destroy_connection, cleanup_it]{
-    if (m_context.connection) {
         // Remove cleanup callback so it doesn't run and try to access
         // this object after it's already destroyed.
-        m_context.connection->removeSyncCleanup(cleanup_it);
+        // Use sync() to run this on the event loop thread because otherwise
+        // it's possible an onDisconnect handler could fire and delete the
+        // connection object before or during the removeSyncCleanup call.
+        m_context.loop->sync([&]() {
+            Lock lock{m_context.loop->m_mutex};
+            if (m_context.connection) m_context.connection->removeSyncCleanup(cleanup_it, lock);
+        });
 
         // If the capnp interface defines a destroy method, call it to destroy
         // the remote object, waiting for it to be deleted server side. If the
@@ -430,12 +439,11 @@ ProxyClientBase<Interface, Impl>::ProxyClientBase(typename Interface::Client cli
             {
                 typename Interface::Client(std::move(m_client));
             }
-            if (destroy_connection) {
+            if (m_context.connection && destroy_connection) {
                 delete m_context.connection;
                 m_context.connection = nullptr;
             }
         });
-    }
     });
     Sub::construct(*this);
 }
