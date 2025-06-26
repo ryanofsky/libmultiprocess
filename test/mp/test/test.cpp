@@ -49,12 +49,12 @@ namespace test {
 class TestSetup
 {
 public:
-    std::thread thread;
     std::function<void()> server_disconnect;
     std::function<void()> client_disconnect;
     std::promise<std::unique_ptr<ProxyClient<messages::FooInterface>>> client_promise;
     std::unique_ptr<ProxyClient<messages::FooInterface>> client;
     ProxyServer<messages::FooInterface>* server{nullptr};
+    std::thread thread;
 
     TestSetup(bool client_owns_connection = true)
         : thread{[&] {
