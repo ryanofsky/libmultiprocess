@@ -398,6 +398,7 @@ ProxyClientBase<Interface, Impl>::ProxyClientBase(typename Interface::Client cli
         {
             typename Interface::Client(std::move(m_client));
         }
+        Lock lock{m_context.loop->m_mutex};
         m_context.connection = nullptr;
     });
 

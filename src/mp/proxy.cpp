@@ -132,9 +132,11 @@ Connection::~Connection()
     // on clean and unclean shutdowns. In unclean shutdown case when the
     // connection is broken, sync and async cleanup lists will filled with
     // callbacks. In the clean shutdown case both lists will be empty.
+    Lock lock{m_loop->m_mutex};
     while (!m_sync_cleanup_fns.empty()) {
-        m_sync_cleanup_fns.front()();
-        m_sync_cleanup_fns.pop_front();
+        CleanupList fn;
+        fn.splice(fn.begin(), m_sync_cleanup_fns, m_sync_cleanup_fns.begin());
+        Unlock(lock, fn.front());
     }
 }
 
