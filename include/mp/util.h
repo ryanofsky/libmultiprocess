@@ -7,7 +7,7 @@
 
 #include <capnp/schema.h>
 #include <cassert>
-#include <cstddef>
+#include <cstdlib>
 #include <cstring>
 #include <exception>
 #include <functional>
@@ -15,10 +15,16 @@
 #include <mutex>
 #include <string>
 #include <tuple>
+#include <typeinfo>
 #include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
+
+#if __has_include(<cxxabi.h>)
+#include <cxxabi.h>
+#include <memory>
+#endif
 
 namespace mp {
 
@@ -274,6 +280,7 @@ inline char* CharCast(unsigned char* c) { return (char*)c; }
 inline const char* CharCast(const char* c) { return c; }
 inline const char* CharCast(const unsigned char* c) { return (const char*)c; }
 
+<<<<<<< HEAD
 //! Exception thrown from code executing an IPC call that is interrupted.
 struct InterruptException final : std::exception {
     explicit InterruptException(std::string message) : m_message(std::move(message)) {}
@@ -337,6 +344,31 @@ void CancelMonitor::promiseDestroyed(CancelProbe& probe)
     if (m_on_cancel) m_on_cancel();
     m_probe = nullptr;
 }
+||||||| parent of 2af6a9b (debug: Add TypeName() function and log statements for Proxy objects being created and destroyed)
+=======
+#if __has_include(<cxxabi.h>)   // GCC & Clang ─ use <cxxabi.h> to demangle
+inline std::string _demangle(const char* m)
+{
+    int status = 0;
+    std::unique_ptr<char, void(*)(void*)> p{
+        abi::__cxa_demangle(m, nullptr, nullptr, &status), std::free};
+    return (status == 0 && p) ? p.get() : m;   // fall back on mangled if needed
+}
+#else                           // MSVC or other ─ no demangling available
+inline std::string _demangle(const char* m) { return m; }
+#endif
+
+template<class T>
+std::string CxxTypeName(const T& /*unused*/)
+{
+#ifdef __cpp_rtti
+    return _demangle(typeid(std::decay_t<T>).name());
+#else
+    return "<type information unavailable without rtti>";
+#endif
+}
+
+>>>>>>> 2af6a9b (debug: Add TypeName() function and log statements for Proxy objects being created and destroyed)
 } // namespace mp
 
 #endif // MP_UTIL_H
