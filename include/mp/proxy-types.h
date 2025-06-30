@@ -568,16 +568,28 @@ template <typename Client>
 void clientDestroy(Client& client)
 {
     if (client.m_context.connection) {
+<<<<<<< HEAD
         MP_LOG(*client.m_context.loop, Log::Info) << "IPC client destroy " << typeid(client).name();
+||||||| parent of 0ce75e3 (debug: Add TypeName() function and log statements for Proxy objects being created and destroyed)
+        client.m_context.loop->log() << "IPC client destroy " << typeid(client).name();
+=======
+        client.m_context.loop->log() << "IPC client destroy " << TypeName(client);
+>>>>>>> 0ce75e3 (debug: Add TypeName() function and log statements for Proxy objects being created and destroyed)
     } else {
-        KJ_LOG(INFO, "IPC interrupted client destroy", typeid(client).name());
+        KJ_LOG(INFO, "IPC interrupted client destroy", TypeName(client));
     }
 }
 
 template <typename Server>
 void serverDestroy(Server& server)
 {
+<<<<<<< HEAD
     MP_LOG(*server.m_context.loop, Log::Info) << "IPC server destroy " << typeid(server).name();
+||||||| parent of 0ce75e3 (debug: Add TypeName() function and log statements for Proxy objects being created and destroyed)
+    server.m_context.loop->log() << "IPC server destroy " << typeid(server).name();
+=======
+    server.m_context.loop->log() << "IPC server destroy " << TypeName(server);
+>>>>>>> 0ce75e3 (debug: Add TypeName() function and log statements for Proxy objects being created and destroyed)
 }
 
 //! Entry point called by generated client code that looks like:
