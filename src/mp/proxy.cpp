@@ -324,7 +324,11 @@ std::tuple<ConnThread, bool> SetThread(ConnThreads& threads, std::mutex& mutex, 
     thread = threads.emplace(
         std::piecewise_construct, std::forward_as_tuple(connection),
         std::forward_as_tuple(make_thread(), connection, /* destroy_connection= */ false)).first;
-    thread->second.setDisconnectCallback([&threads, &mutex, thread, destroyed = thread->second.m_destroyed] {
+    thread->second.setDisconnectCallback([&threads, &mutex, thread, destroyed = thread->second.m_destroyed, loop = &*thread->second.m_context.loop] {
+        {
+            const Lock lock(loop->m_mutex);
+            if (*destroyed) return;
+        }
         // Note: it is safe to use the `thread` iterator in this cleanup
         // function, because the iterator would only be invalid if the map entry
         // was removed, and if the map entry is removed the ProxyClient<Thread>
@@ -335,7 +339,6 @@ std::tuple<ConnThread, bool> SetThread(ConnThreads& threads, std::mutex& mutex, 
         // try to unregister this callback after connection is destroyed.
         // Remove connection pointer about to be destroyed from the map
         const std::unique_lock<std::mutex> lock(mutex);
-        if (*destroyed) return;
         thread->second.m_disconnect_cb.reset();
         threads.erase(thread);
     });

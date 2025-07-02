@@ -80,7 +80,7 @@ struct ProxyClient<Thread> : public ProxyClientBase<Thread, ::capnp::Void>
     std::optional<CleanupIt> m_disconnect_cb;
     //! State shared with disconnect callback telling it if this ProxyClient is
     //! already destroyed and no longer should be accessed. This is also
-    //! accessed from multiple threads and guarded with Waiter::m_mutex.
+    //! accessed from multiple threads, and guared with EventLoop::m_mutex
     std::shared_ptr<bool> m_destroyed{std::make_shared<bool>(false)};
 };
 
