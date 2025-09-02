@@ -112,7 +112,7 @@ auto PassField(Priority<1>, TypeList<>, ServerContext& server_context, const Fn&
                         server.m_context.loop->sync([&] {
                             // Look up the thread again since it may no longer
                             // be there after a disconnect.
-                            std::unique_lock<std::mutex> lock(thread_context.waiter->m_mutex);
+                            Lock lock(thread_context.waiter->m_mutex);
                             ConnThread thread = request_threads.find(server.m_context.connection);
                             if (thread != request_threads.end()) {
                                 // Release Waiter::m_mutex while calling the
