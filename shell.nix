@@ -40,6 +40,7 @@ let
   clang-tools = llvm.clang-tools.override { inherit enableLibcxx; };
   cmakeHashes = {
     "3.12.4" = "sha256-UlVYS/0EPrcXViz/iULUcvHA5GecSUHYS6raqbKOMZQ=";
+    "4.1.1" = "sha256-sp9vGXM6oiS3djUHoQikJ+1Ixojh+vIrKcROHDBUkoI=";
   };
   cmakeBuild = if cmakeVersion == null then pkgs.cmake else (pkgs.cmake.overrideAttrs (old: {
     version = cmakeVersion;
@@ -50,11 +51,12 @@ let
     patches = [];
   })).override { isMinimalBuild = true; };
 in crossPkgs.mkShell {
-  buildInputs = [
+  buildInputs = lib.optionals (capnprotoVersion != "none") [
     capnproto
   ];
   nativeBuildInputs = with pkgs; [
     cmakeBuild
+    git
     include-what-you-use
     ninja
   ] ++ lib.optionals (!minimal) [
