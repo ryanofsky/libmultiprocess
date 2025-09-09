@@ -18,3 +18,9 @@
 # been noticed upstream because it only affects CMake packages depending on
 # capnproto, not autoconf packages.
 set(FOUND_LIBATOMIC TRUE)
+
+# Prevent env CXXFLAGS=-Werror from leaking into CMake's try-compile checks
+# and causing find_package(Threads REQUIRED) to fail on FreeBSD/OpenBSD.
+# In the future, prefer adding warning flags via an INTERFACE target rather
+# than environment variables.
+set(CMAKE_TRY_COMPILE_NO_PLATFORM_VARIABLES TRUE)
