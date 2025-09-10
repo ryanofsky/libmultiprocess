@@ -12,6 +12,7 @@
 
 #include <atomic>
 #include <capnp/capability.h>
+#include <capnp/common.h> // IWYU pragma: keep
 #include <capnp/rpc.h>
 #include <condition_variable>
 #include <functional>

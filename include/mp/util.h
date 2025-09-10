@@ -7,13 +7,14 @@
 
 #include <capnp/schema.h>
 #include <cassert>
-#include <cstddef>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <kj/string-tree.h>
 #include <mutex>
 #include <string>
 #include <tuple>
+#include <typeinfo>
 #include <type_traits>
 #include <utility>
 #include <variant>
