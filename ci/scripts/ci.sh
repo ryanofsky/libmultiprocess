@@ -46,7 +46,14 @@ if ! cmake "$src_dir" "${cmake_args[@]}"; then
   # If cmake failed, try it again with debug options.
   # Could add --trace / --trace-expand here too for more information but these are very verbose.
   cmake_args+=(--debug-find --debug-trycompile --log-level=DEBUG)
-  cmake "$src_dir" "${cmake_args[@]}"
+  cmake "$src_dir" "${cmake_args[@]}" || echo "cmake exited with $?"
+  find -type f -name CMakeOutput.log -exec sh -c 'echo "--- {} ---"; cat "{}"' \;
+  find -type f -name CMakeError.log -exec sh -c 'echo "--- {} ---"; cat "{}"' \;
+  find CMakeFiles -type d -name 'CMakeScratch*' | while read -r d; do
+    echo "--- $d ---"
+    find "$d" -type f -maxdepth 1 -exec sh -c 'echo ">>> {}"; cat "{}"; echo' \;
+  done
+  false
 fi
 if ver_ge "$cmake_ver" "3.15"; then
   cmake --build . --parallel -t "${BUILD_TARGETS[@]}" -- "${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}"
