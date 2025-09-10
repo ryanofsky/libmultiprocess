@@ -12,7 +12,13 @@ endif()
 
 include("cmake/compat_find.cmake")
 
-find_package(Threads REQUIRED)
+add_library(mpdeps INTERFACE)
+
+find_package(Threads)
+if(Threads_FOUND)
+  target_link_libraries(mpdeps INTERFACE Threads::Threads)
+endif()
+
 find_package(CapnProto 0.9 NO_MODULE)
  if(NOT CapnProto_FOUND)
    message(FATAL_ERROR
@@ -206,7 +212,7 @@ target_link_libraries(mpgen PRIVATE CapnProto::capnp)
 target_link_libraries(mpgen PRIVATE CapnProto::capnpc)
 target_link_libraries(mpgen PRIVATE CapnProto::kj)
 target_link_libraries(mpgen PRIVATE CapnProto::kj-async)
-target_link_libraries(mpgen PRIVATE Threads::Threads)
+target_link_libraries(mpgen PRIVATE mpdeps)
 # Use CAPNP_EXECUTABLE/CAPNPC_CXX_EXECUTABLE cmake variables set by
 # CapnProtoConfig.cmake rather than reading the CapnProto::capnp_tool
 # IMPORTED_LOCATION directly. On Debian/Ubuntu, IMPORTED_LOCATION is broken
