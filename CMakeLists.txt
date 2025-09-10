@@ -43,14 +43,7 @@ set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 include("cmake/compat_find.cmake")
 
-add_library(mpdeps INTERFACE)
-
-find_package(Threads)
-
-if(Threads_FOUND)
-  target_link_libraries(mpdeps INTERFACE Threads::Threads)
-endif()
-
+find_package(Threads REQUIRED)
 find_package(CapnProto 0.7 QUIET NO_MODULE)
  if(NOT CapnProto_FOUND)
    message(FATAL_ERROR
@@ -240,7 +233,7 @@ target_link_libraries(mpgen PRIVATE CapnProto::capnp)
 target_link_libraries(mpgen PRIVATE CapnProto::capnp-rpc)
 target_link_libraries(mpgen PRIVATE CapnProto::capnpc)
 target_link_libraries(mpgen PRIVATE CapnProto::kj)
-target_link_libraries(mpgen PRIVATE mpdeps)
+target_link_libraries(mpgen PRIVATE Threads::Threads)
 set_target_properties(mpgen PROPERTIES
     INSTALL_RPATH_USE_LINK_PATH TRUE)
 set_target_properties(mpgen PROPERTIES
