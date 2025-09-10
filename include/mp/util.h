@@ -182,6 +182,13 @@ public:
     std::unique_lock<std::mutex> m_lock;
 };
 
+template<typename T>
+struct GuardedRef
+{
+    Mutex& mutex;
+    T& ref MP_GUARDED_BY(mutex);
+};
+
 //! Analog to std::lock_guard that unlocks instead of locks.
 template <typename Lock>
 struct UnlockGuard
