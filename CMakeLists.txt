@@ -12,8 +12,23 @@ endif()
 
 include("cmake/compat_find.cmake")
 
+<<<<<<< HEAD
 find_package(Threads REQUIRED)
 find_package(CapnProto 0.9 NO_MODULE)
+||||||| parent of 9441e5a (cmake: fix find_package(Threads REQUIRED) error with new cmake policies)
+find_package(Threads REQUIRED)
+find_package(CapnProto 0.7 QUIET NO_MODULE)
+=======
+add_library(mpdeps INTERFACE)
+
+find_package(Threads)
+
+if(Threads_FOUND)
+  target_link_libraries(mpdeps INTERFACE Threads::Threads)
+endif()
+
+find_package(CapnProto 0.7 QUIET NO_MODULE)
+>>>>>>> 9441e5a (cmake: fix find_package(Threads REQUIRED) error with new cmake policies)
  if(NOT CapnProto_FOUND)
    message(FATAL_ERROR
      "Cap'n Proto is required but was not found.\n"
@@ -205,6 +220,7 @@ target_include_directories(mpgen PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE
 target_link_libraries(mpgen PRIVATE CapnProto::capnp)
 target_link_libraries(mpgen PRIVATE CapnProto::capnpc)
 target_link_libraries(mpgen PRIVATE CapnProto::kj)
+<<<<<<< HEAD
 target_link_libraries(mpgen PRIVATE CapnProto::kj-async)
 target_link_libraries(mpgen PRIVATE Threads::Threads)
 # Use CAPNP_EXECUTABLE/CAPNPC_CXX_EXECUTABLE cmake variables set by
@@ -217,6 +233,11 @@ target_link_libraries(mpgen PRIVATE Threads::Threads)
 # target_compile_definitions evaluates correctly at generation time.
 target_compile_definitions(mpgen PRIVATE CAPNP_EXECUTABLE=\"${CAPNP_EXECUTABLE}\")
 target_compile_definitions(mpgen PRIVATE CAPNPC_CXX_EXECUTABLE=\"${CAPNPC_CXX_EXECUTABLE}\")
+||||||| parent of 9441e5a (cmake: fix find_package(Threads REQUIRED) error with new cmake policies)
+target_link_libraries(mpgen PRIVATE Threads::Threads)
+=======
+target_link_libraries(mpgen PRIVATE mpdeps)
+>>>>>>> 9441e5a (cmake: fix find_package(Threads REQUIRED) error with new cmake policies)
 set_target_properties(mpgen PROPERTIES
     INSTALL_RPATH_USE_LINK_PATH TRUE)
 set_target_properties(mpgen PROPERTIES

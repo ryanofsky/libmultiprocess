@@ -2,7 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <mp/config.h>
+#include <mp/config.h> // IWYU pragma: keep
 #include <mp/util.h>
 
 #include <cerrno>
@@ -11,9 +11,15 @@
 #include <kj/common.h>
 #include <kj/debug.h>
 #include <kj/string-tree.h>
+<<<<<<< HEAD
 #include <optional>
 #include <pthread.h>
 #include <csignal>
+||||||| parent of 9441e5a (cmake: fix find_package(Threads REQUIRED) error with new cmake policies)
+#include <pthread.h>
+=======
+#include <pthread.h> // IWYU pragma: keep
+>>>>>>> 9441e5a (cmake: fix find_package(Threads REQUIRED) error with new cmake policies)
 #include <sstream>
 #include <string>
 #include <sys/types.h>
