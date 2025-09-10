@@ -46,14 +46,9 @@ if ! cmake "$src_dir" "${cmake_args[@]}"; then
   # If cmake failed, try it again with debug options.
   # Could add --trace / --trace-expand here too but they are very verbose.
   cmake_args+=(--debug-find --debug-output --debug-trycompile --log-level=DEBUG)
-  cmake "$src_dir" "${cmake_args[@]}" || echo "cmake exited with $?"
-  echo "=== CMakeConfigureLog.yaml ==="
-  if [ -f CMakeFiles/CMakeConfigureLog.yaml ]; then
-    cat CMakeFiles/CMakeConfigureLog.yaml
-  else
-    echo "(no configure log found)"
-  fi
-  find . -ls
+  cmake "$src_dir" "${cmake_args[@]}" || : "cmake exited with $?"
+  cat CMakeFiles/CMakeConfigureLog.yaml || true
+  find . -ls || true
   false
 fi
 if ver_ge "$cmake_ver" "3.15"; then
