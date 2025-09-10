@@ -41,8 +41,23 @@ src_dir=$PWD
 mkdir -p "$CI_DIR"
 cd "$CI_DIR"
 export CMAKE_BUILD_PARALLEL_LEVEL="$(nproc)"
+<<<<<<< HEAD
 git --no-pager log -1 || true
 cmake "$src_dir" "${CMAKE_ARGS[@]+"${CMAKE_ARGS[@]}"}"
+||||||| parent of 6d719cf (ci: add cmake debug output)
+cmake "$src_dir" "${CMAKE_ARGS[@]+"${CMAKE_ARGS[@]}"}"
+=======
+cmake_args=("${CMAKE_ARGS[@]+"${CMAKE_ARGS[@]}"}")
+if ! cmake "$src_dir" "${cmake_args[@]}"; then
+  # If cmake failed, try it again with debug options.
+  # Could add --trace / --trace-expand here too but they are very verbose.
+  cmake_args+=(--debug-find --debug-output --debug-trycompile --log-level=DEBUG)
+  cmake "$src_dir" "${cmake_args[@]}" || : "cmake exited with $?"
+  cat CMakeFiles/CMakeConfigureLog.yaml || true
+  find . -ls || true
+  false
+fi
+>>>>>>> 6d719cf (ci: add cmake debug output)
 if ver_ge "$cmake_ver" "3.15"; then
   cmake --build . -t "${BUILD_TARGETS[@]}" -- "${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}"
 else
