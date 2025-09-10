@@ -44,11 +44,11 @@ git --no-pager log -1 || true
 cmake_args=("${CMAKE_ARGS[@]+"${CMAKE_ARGS[@]}"}")
 if ! cmake "$src_dir" "${cmake_args[@]}"; then
   # If cmake failed, try it again with debug options.
-  # Could add --trace / --trace-expand here too for more information but these are very verbose.
-  cmake_args+=(--debug-find --debug-trycompile --log-level=DEBUG)
+  # Could add --trace / --trace-expand here too but they are very verbose.
+  cmake_args+=(--debug-find --debug-trycompile --log-level=DEBUG -DCMAKE_TRY_COMPILE_NO_CLEAN=ON)
   cmake "$src_dir" "${cmake_args[@]}" || echo "cmake exited with $?"
-  find -type f -name CMakeOutput.log -exec sh -c 'echo "--- {} ---"; cat "{}"' \;
-  find -type f -name CMakeError.log -exec sh -c 'echo "--- {} ---"; cat "{}"' \;
+  find . -type f -name CMakeOutput.log -exec sh -c 'echo "--- {} ---"; cat "{}"' \;
+  find . -type f -name CMakeError.log -exec sh -c 'echo "--- {} ---"; cat "{}"' \;
   find CMakeFiles -type d -name 'CMakeScratch*' | while read -r d; do
     echo "--- $d ---"
     find "$d" -type f -maxdepth 1 -exec sh -c 'echo ">>> {}"; cat "{}"; echo' \;
