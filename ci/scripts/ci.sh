@@ -42,7 +42,18 @@ mkdir -p "$CI_DIR"
 cd "$CI_DIR"
 export CMAKE_BUILD_PARALLEL_LEVEL="$(nproc)"
 git --no-pager log -1 || true
-cmake "$src_dir" "${CMAKE_ARGS[@]+"${CMAKE_ARGS[@]}"}"
+cmake_args=("${CMAKE_ARGS[@]+"${CMAKE_ARGS[@]}"}")
+if ! cmake "$src_dir" "${cmake_args[@]}"; then
+  # If cmake failed, try it again with debug options.
+  # Could add --trace / --trace-expand here too but they are very verbose.
+  cmake_args+=(--debug-output --debug-trycompile)
+  if ver_ge "$cmake_ver" "3.16"; then cmake_args+=(--log-level=DEBUG); fi
+  if ver_ge "$cmake_ver" "3.17"; then cmake_args+=(--debug-find); fi
+  cmake "$src_dir" "${cmake_args[@]}" || : "cmake exited with $?"
+  if ver_ge "$cmake_ver" "3.26"; then cat CMakeFiles/CMakeConfigureLog.yaml || true; fi
+  find . -ls || true
+  false
+fi
 if ver_ge "$cmake_ver" "3.15"; then
   cmake --build . -t "${BUILD_TARGETS[@]}" -- "${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}"
 else
