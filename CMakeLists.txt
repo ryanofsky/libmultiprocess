@@ -36,6 +36,18 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   set(CMAKE_CXX_STANDARD_REQUIRED YES)
 endif()
 
+# Failing inline try_compile example
+try_compile(HAS_BOGUS
+    "${CMAKE_BINARY_DIR}/try_bogus"   # binary dir for the test
+    SOURCE "int main() { return bogus(); }"
+)
+
+if(HAS_BOGUS)
+  message(STATUS "bogus() exists")
+else()
+  message(STATUS "bogus() not found (expected failure)")
+endif()
+
 include("cmake/compat_find.cmake")
 
 find_package(Threads REQUIRED)

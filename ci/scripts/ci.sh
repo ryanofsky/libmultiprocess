@@ -47,6 +47,14 @@ if ! cmake "$src_dir" "${cmake_args[@]}"; then
   # Could add --trace / --trace-expand here too but they are very verbose.
   cmake_args+=(--debug-find --debug-trycompile --log-level=DEBUG -DCMAKE_TRY_COMPILE_NO_CLEAN=ON)
   cmake "$src_dir" "${cmake_args[@]}" || echo "cmake exited with $?"
+  echo "=== CMakeConfigureLog.yaml ==="
+  if [ -f CMakeFiles/CMakeConfigureLog.yaml ]; then
+    cat CMakeFiles/CMakeConfigureLog.yaml
+  else
+    echo "(no configure log found)"
+  fi
+
+
   find . -ls
   find . -type f -name CMakeOutput.log -exec sh -c 'echo "--- {} ---"; cat "{}"' \;
   find . -type f -name CMakeError.log -exec sh -c 'echo "--- {} ---"; cat "{}"' \;
