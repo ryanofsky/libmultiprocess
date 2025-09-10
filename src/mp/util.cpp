@@ -2,7 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <mp/config.h>
+#include <mp/config.h> // IWYU pragma: keep
 #include <mp/util.h>
 
 #include <cerrno>
