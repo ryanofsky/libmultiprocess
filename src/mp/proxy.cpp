@@ -7,6 +7,7 @@
 #include <mp/proxy-io.h>
 #include <mp/proxy-types.h>
 #include <mp/proxy.capnp.h>
+#include <mp/type-context.h>
 #include <mp/type-threadmap.h>
 #include <mp/util.h>
 
@@ -307,6 +308,7 @@ bool EventLoop::done() const
 std::tuple<ConnThread, bool> SetThread(GuardedRef<ConnThreads> threads, Connection* connection, const std::function<Thread::Client()>& make_thread)
 {
     const Lock lock(threads.mutex);
+    if (connection->m_loop->hasSignal<signals::CallSetup>()) connection->m_loop->sendSignal<signals::CallSetup>();
     auto thread = threads.ref.find(connection);
     if (thread != threads.ref.end()) return {thread, false};
     thread = threads.ref.emplace(

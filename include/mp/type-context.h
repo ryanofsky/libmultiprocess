@@ -9,6 +9,13 @@
 #include <mp/util.h>
 
 namespace mp {
+namespace signals{
+struct CallStart{};
+struct CallSetup{};
+struct CallTeardown{};
+struct CallEnd{};
+} // namespace signals
+
 template <typename Output>
 void CustomBuildField(TypeList<>,
     Priority<1>,
@@ -66,10 +73,12 @@ auto PassField(Priority<1>, TypeList<>, ServerContext& server_context, const Fn&
     int req = server_context.req;
     auto invoke = [fulfiller = kj::mv(future.fulfiller),
          call_context = kj::mv(server_context.call_context), &server, req, fn, args...]() mutable {
+                using namespace signals;
                 const auto& params = call_context.getParams();
                 Context::Reader context_arg = Accessor::get(params);
                 ServerContext server_context{server, call_context, req};
                 {
+                    if (server.m_context.loop->template hasSignal<CallStart>()) server.m_context.loop->template sendSignal<CallStart>();
                     // Before invoking the function, store a reference to the
                     // callbackThread provided by the client in the
                     // thread_local.request_threads map. This way, if this
@@ -102,6 +111,7 @@ auto PassField(Priority<1>, TypeList<>, ServerContext& server_context, const Fn&
                     const bool erase_thread{inserted};
                     KJ_DEFER(if (erase_thread) {
                         Lock lock(thread_context.waiter->m_mutex);
+                        if (server.m_context.loop->template hasSignal<CallTeardown>()) server.m_context.loop->template sendSignal<CallTeardown>();
                         // Call erase here with a Connection* argument instead
                         // of an iterator argument, because the `request_thread`
                         // iterator may be invalid if the connection is closed
@@ -112,7 +122,9 @@ auto PassField(Priority<1>, TypeList<>, ServerContext& server_context, const Fn&
                         // ProxyServer<Thread> destructor calls
                         // request_threads.clear().
                         request_threads.erase(server.m_context.connection);
-                    });
+                        }
+                        if (server.m_context.loop->template hasSignal<CallEnd>()) server.m_context.loop->template sendSignal<CallEnd>();
+                    );
                     fn.invoke(server_context, args...);
                 }
                 KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {

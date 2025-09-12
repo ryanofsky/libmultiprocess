@@ -12,6 +12,7 @@
 
 #include <capnp/rpc-twoparty.h>
 
+#include <any>
 #include <assert.h>
 #include <condition_variable>
 #include <functional>
@@ -221,6 +222,16 @@ public:
     Logger logPlain() { return {false, m_log_opts.log_fn}; }
     Logger raise() { return {true, m_log_opts.log_fn}; }
 
+    template<typename SignalType>
+    bool hasSignal() const { return bool{m_signal}; }
+
+    template<typename SignalType, typename... Args>
+    void sendSignal(Args&&... args) const
+    {
+        assert(m_signal);
+        m_signal(SignalType{std::forward<Args>(args)...});
+    }
+
     //! Process name included in thread names so combined debug output from
     //! multiple processes is easier to understand.
     const char* m_exe_name;
@@ -270,6 +281,9 @@ public:
 
     //! External context pointer.
     void* m_context;
+
+    //! External callback for hooks / tests.
+    std::function<void(std::any)> m_signal;
 };
 
 //! Single element task queue used to handle recursive capnp calls. (If server
