@@ -30,7 +30,7 @@ interface FooInterface $Proxy.wrap("mp::test::FooImplementation") {
     passEnum @15 (arg :Int32) -> (result :Int32);
     passFn @16 (context :Proxy.Context, fn :FooFn) -> (result :Int32);
     callFn @17 () -> ();
-    callFnAsync @18 (context :Proxy.Context) -> ();
+    callFnAsync @18 (testArg :TestArg, context :Proxy.Context) -> ();
 }
 
 interface FooCallback $Proxy.wrap("mp::test::FooCallback") {
@@ -72,4 +72,8 @@ struct FooMutable {
 struct Pair(T1, T2) {
     first @0 :T1;
     second @1 :T2;
+}
+
+# Special argument used in disconnect test to implement ASYNC_START / ASYNC_END hooks.
+struct TestArg $Proxy.count(0) {
 }
