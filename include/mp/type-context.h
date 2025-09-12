@@ -9,6 +9,11 @@
 #include <mp/util.h>
 
 namespace mp {
+struct SignalCallStart{};
+struct SignalCallSetup{};
+struct SignalCallTeardown{};
+struct SignalCallEnd{};
+
 template <typename Output>
 void CustomBuildField(TypeList<>,
     Priority<1>,
@@ -70,6 +75,7 @@ auto PassField(Priority<1>, TypeList<>, ServerContext& server_context, const Fn&
                 Context::Reader context_arg = Accessor::get(params);
                 ServerContext server_context{server, call_context, req};
                 {
+                    if (server.m_context.loop->m_signal) server.m_context.loop->m_signal(SignalCallStart{});
                     // Before invoking the function, store a reference to the
                     // callbackThread provided by the client in the
                     // thread_local.request_threads map. This way, if this
@@ -102,6 +108,7 @@ auto PassField(Priority<1>, TypeList<>, ServerContext& server_context, const Fn&
                     const bool erase_thread{inserted};
                     KJ_DEFER(if (erase_thread) {
                         std::unique_lock<std::mutex> lock(thread_context.waiter->m_mutex);
+                        if (server.m_context.loop->m_signal) server.m_context.loop->m_signal(SignalCallTeardown{});
                         // Call erase here with a Connection* argument instead
                         // of an iterator argument, because the `request_thread`
                         // iterator may be invalid if the connection is closed
@@ -111,8 +118,11 @@ auto PassField(Priority<1>, TypeList<>, ServerContext& server_context, const Fn&
                         // erases the thread from the map, and also because the
                         // ProxyServer<Thread> destructor calls
                         // request_threads.clear().
+                        if (server.m_context.loop->m_signal) server.m_context.loop->m_signal(SignalCallTeardown{});
                         request_threads.erase(server.m_context.connection);
-                    });
+                        }
+                        if (server.m_context.loop->m_signal) server.m_context.loop->m_signal(SignalCallEnd{});
+                    );
                     fn.invoke(server_context, args...);
                 }
                 KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {

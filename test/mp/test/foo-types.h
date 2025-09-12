@@ -94,6 +94,41 @@ inline void CustomPassMessage(InvokeContext& invoke_context,
     fn(mut);
     builder.setMessage(mut.message + " return");
 }
+
+//! CustomBuildField for TestArg parameter. TestArg doesn't do anything special
+//! on the client side, so this does nothing. TestArg server-side behavior is
+//! implemented in CustomPassField below.
+template <typename Output>
+requires (std::is_same_v<decltype(std::declval<Output>().get()), test::messages::TestArg::Builder>)
+void CustomBuildField(TypeList<>,
+    Priority<1>,
+    ClientInvokeContext& invoke_context,
+    Output&& output)
+{
+}
+
+//! CustomPassField processing TestArg parameter by calling a start_hook()
+//! function which returns a bool promise, and continuing to execute the IPC if
+//! the promise value is true, aborting if it is false. It also calls an
+//! end_hook() function after the IPC call finishes, if it wasn't aborted.
+template <typename Accessor, typename ServerContext, typename Fn, typename... Args>
+requires (std::is_same_v<decltype(Accessor::get(std::declval<ServerContext>().call_context.getParams())), test::messages::TestArg::Reader>)
+auto CustomPassField(TypeList<>, ServerContext& server_context, const Fn& fn, Args&&... args)
+{
+    const auto& start_hook = server_context.proxy_server.m_impl->m_start_hook;
+    return start_hook().then([old=server_context, call_context=kj::mv(server_context.call_context), fn, args...](bool invoke_fn) mutable {
+        // If start hook returns false, skip calling IPC function.
+        if (!invoke_fn) return kj::Promise<typename ServerContext::CallContext>(kj::mv(call_context));
+        // If start hook returns true, continue calling IPC function and
+        // processing parameters/return values and calling end hook.
+        ServerContext server_context{old.proxy_server, call_context, old.req};
+        return fn.invoke(server_context, args...).then([old=server_context](ServerContext::CallContext call_context) {
+            ServerContext server_context{old.proxy_server, call_context, old.req};
+            const auto& end_hook = server_context.proxy_server.m_impl->m_end_hook;
+            return end_hook().then([call_context = kj::mv(call_context)] { return call_context; });
+        });
+    });
+}
 } // namespace mp
 
 #endif // MP_TEST_FOO_TYPES_H

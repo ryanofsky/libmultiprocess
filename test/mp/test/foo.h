@@ -82,6 +82,10 @@ public:
     void callFn() { assert(m_fn); m_fn(); }
     void callFnAsync() { assert(m_fn); m_fn(); }
     std::function<void()> m_fn;
+    //! Hooks used by disconnect test ASYNC_START and ASYNC_END disconnects.
+    //! Former returns false to able IPC call without executing it.
+    std::function<kj::Promise<bool>()> m_start_hook;
+    std::function<kj::Promise<void>()> m_end_hook;
 };
 
 } // namespace test

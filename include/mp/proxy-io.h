@@ -12,6 +12,7 @@
 
 #include <capnp/rpc-twoparty.h>
 
+#include <any>
 #include <assert.h>
 #include <condition_variable>
 #include <functional>
@@ -270,6 +271,9 @@ public:
 
     //! External context pointer.
     void* m_context;
+
+    //! External callback for hooks / tests.
+    std::function<void(std::any)> m_signal;
 };
 
 //! Single element task queue used to handle recursive capnp calls. (If server
