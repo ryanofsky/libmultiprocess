@@ -4,6 +4,7 @@
 
 #include <mp/test/foo.capnp.h>
 #include <mp/test/foo.capnp.proxy.h>
+#include <mp/type-context.h>
 
 #include <capnp/capability.h>
 #include <capnp/rpc.h>
@@ -209,13 +210,11 @@ KJ_TEST("Call FooInterface methods")
 // object (due to the m_rpc_system.reset() call in the ~Connection destructor
 // which frees any ProxyServer objects not in use).
 struct DisconnectTest {
-    //! When to trigger disconnect.
+    //! Enum values indicating when to trigger disconnect and start waiting, and
+    //! when to resume execution after waiting.
     enum class When {
         //! Trigger disconnect before client makes an IPC call.
         BEFORE_CALL,
-        //! Disconnect during a synchronous IPC call (IPC call with no
-        //! mp.Context parameter that executes on the Event Loop thread)
-        SYNC_BODY,
         //! Disconnect at the start of an asynchronous IPC call (IPC call with
         //! an mp.Context parameter that executes on a worker thread)
         ASYNC_START,
@@ -224,67 +223,69 @@ struct DisconnectTest {
         //! Disconnect while the worker thread is setting up the request_threads
         //! map, with Waiter::m_mutex held.
         ASYNC_THREAD_SETUP,
-        //! Disconnect in the body of an asynchronous IPC call.
-        ASYNC_THREAD_BODY,
+        //! Disconnect in the body of the IPC call.
+        INSIDE_CALL,
         //! Disconnect while the worker thread is cleaning up the
         //! request_threads map, with Waiter::m_mutex held.
         ASYNC_THREAD_TEARDOWN,
         //! Disconect before exiting the worker thread.
         ASYNC_THREAD_END,
-        //! Disconect at the end of an asynchronous call, in the event loop
+        //! Disconnect at the end of an asynchronous call, in the event loop
         //! thread, right before sending the response.
         ASYNC_END,
+        //! Enum values below are only used to indicate when to stop waiting
+        //! after a disconnection. They can't be trigger the disconnection
+        //! because they only happen after it is triggered.
+        AFTER_CALL,
+        CLIENT_DISCONNECT_START,
+        CLIENT_DISCONNECT_END,
+        SERVER_DISCONNECT_START,
+        SERVER_DISCONNECT_END,
+        MAX,
     };
 
-    //! After disconnecting, whether to wait for the disconnect to be processed
-    //! on the other end before continuing, or to wait until the IPC call
-    //! returns, or let the disconnect happen naturally. The first mode is
-    //! useful for letting test deterministically test all possible states. The
-    //! others are useful for checking to see if there are any race conditions,
-    //! especially with ThreadSanitizer.
-    enum class How { WAIT_DISCONNECTED, WAIT_DONE, YOLO };
+    //! Whether to make synchronous IPC call (with no mp.Context parameter that
+    //! executes on the Event Loop thread) or an asynchronous IPC call (with an
+    //! mp.Context parameter that executes on a worker thread)
+    enum class CallType { SYNC, ASYNC };
 
-    static void Run();
+    template <typename E>
+    static constexpr auto Ord(E e) noexcept {
+        return static_cast<std::underlying_type_t<E>>(e);
+    }
 
-    static constexpr auto Whens() { return std::array{
-        When::BEFORE_CALL,
-        When::SYNC_BODY,
-        When::ASYNC_START,
-        When::ASYNC_THREAD_START,
-        When::ASYNC_THREAD_SETUP,
-        When::ASYNC_THREAD_BODY,
-        When::ASYNC_THREAD_TEARDOWN,
-        When::ASYNC_THREAD_END,
-        When::ASYNC_END,
-    }; }
-    static constexpr auto Hows() { return std::array{How::WAIT_DISCONNECTED, How::WAIT_DONE, How::YOLO}; }
-    static constexpr auto Sides() { return std::array{Side::SERVER, Side::CLIENT}; }
     static constexpr const char* Str(When when)
     {
         switch (when) {
         case When::BEFORE_CALL: return "BEFORE_CALL";
-        case When::SYNC_BODY: return "SYNC_BODY";
         case When::ASYNC_START: return "ASYNC_START";
         case When::ASYNC_THREAD_START: return "ASYNC_THREAD_START";
         case When::ASYNC_THREAD_SETUP: return "ASYNC_THREAD_SETUP";
-        case When::ASYNC_THREAD_BODY: return "ASYNC_THREAD_BODY";
+        case When::INSIDE_CALL: return "INSIDE_CALL";
         case When::ASYNC_THREAD_TEARDOWN: return "ASYNC_THREAD_TEARDOWN";
         case When::ASYNC_THREAD_END: return "ASYNC_THREAD_END";
         case When::ASYNC_END: return "ASYNC_END";
+        case When::AFTER_CALL: return "AFTER_CALL";
+        case When::CLIENT_DISCONNECT_START: return "CLIENT_DISCONNECT_START";
+        case When::CLIENT_DISCONNECT_END: return "CLIENT_DISCONNECT_END";
+        case When::SERVER_DISCONNECT_START: return "SERVER_DISCONNECT_START";
+        case When::SERVER_DISCONNECT_END: return "SERVER_DISCONNECT_END";
+        case When::MAX: return "MAX";
         }
         assert(0);
         return nullptr;
     }
-    static constexpr const char* Str(How how)
+
+    static constexpr const char* Str(CallType call_type)
     {
-        switch (how) {
-        case How::WAIT_DISCONNECTED: return "WAIT_DISCONNECTED";
-        case How::WAIT_DONE: return "WAIT_DONE";
-        case How::YOLO: return "YOLO";
+        switch (call_type) {
+        case CallType::SYNC: return "SYNC";
+        case CallType::ASYNC: return "ASYNC";
         }
         assert(0);
         return nullptr;
     }
+
     static constexpr const char* Str(Side side)
     {
         switch (side) {
@@ -294,120 +295,159 @@ struct DisconnectTest {
         assert(0);
         return nullptr;
     }
+
+    static void Test(When disconnect_trigger, When disconnect_wait, CallType call_type, Side disconnect_side);
+    static void TestAll();
 };
 
-void DisconnectTest::Run()
+void DisconnectTest::Test(When disconnect_trigger, When disconnect_wait, CallType call_type, Side disconnect_side)
 {
-    for (auto when : Whens())
-    for (auto how : Hows())
-    for (auto side : Sides()) {
-        std::cout << "DisconnectTest when=" << Str(when) << " how=" << Str(how) << " side=" << Str(side) << "\n";
-        std::promise<void> signal;
-        TestSetup setup{/*client_owns_connection=*/side == Side::SERVER && when == When::BEFORE_CALL};
-        ProxyClient<messages::FooInterface>* foo = setup.client.get();
-        KJ_EXPECT(foo->add(1, 2) == 3);
+    std::cout << "DisconnectTest trigger=" << Str(disconnect_trigger) << " wait=" << Str(disconnect_wait) << " call_type=" << Str(call_type) << " side=" << Str(disconnect_side) << "\n";
 
-        // Condition variable, future and variables, for blocking until a
-        // a disconnect has been handled or the IPC call is done.
-        std::condition_variable cv;
-        std::optional<kj::PromiseFulfillerPair<void>> future;
-        bool disconnect_handled{false}
-        bool ipc_done{false};
+    // Condition variable, future and variables for blocking until a a
+    // disconnect has been handled and wait condition has been reached.
+    std::condition_variable cv;
+    std::optional<kj::PromiseFulfillerPair<void>> future;
+    // These need to be declared before TestSetup since they can be accessed in
+    // the TestSetup destructor.
+    bool wait_done{false};
 
-        // Helper to trigger disconnection and optionally wait for disconnection to be processed.
-        auto do_disconnect{[&] {
-            // Add hook to notify condition variable as the server connection
-            // object is destroyed.
-            {
-                const Lock lock(loop->m_mutex);
-                Connection* conn{side == Side::Server setup.server_connection.get() : setup.client_connection.get()}
-                setup.s_connect->m_sync_cleanup_fns.emplace(setup.s_connect->m_sync_cleanup_fns.end(), [&] {
-                    const Lock lock(loop->m_mutex);
-                    cv.notify_all();
-                });
-            }
+    // Helper called when a point is reached that could trigger a disconnect or
+    // a resume notification after a disconnect. This is declared as a
+    // std::function to allow a circular reference between do_when and
+    // do_disconnect.
+    std::function<void(When)> do_when;
 
-            // Sanity check thread disconnect hooks called at expected time.
-            if (when == When::ASYNC_THREAD_SETUP || when == When::ASYNC_THREAD_TEARDOWN) {
-                auto& tc = g_thread_context;
-                auto it = tc.request_threads.find(setup.s_connect);
-                assert(it != tc.request_threads.end());
-            }
+    TestSetup setup{/*client_owns_connection=*/disconnect_side == Side::SERVER && disconnect_trigger == When::BEFORE_CALL};
+    ProxyClient<messages::FooInterface>* foo = setup.client.get();
+    KJ_EXPECT(foo->add(1, 2) == 3);
 
-            if (side == Side::CLIENT) setup.client_disconnect();
-            if (side == Side::SERVER) setup.server_disconnect();
-            if (how == How::WAIT_DISCONNECTED) {
-                if (when == When::ASYNC_THREAD_SETUP || when == When::ASYNC_THREAD_TEARDOWN) {
-                    Lock lock{loop->m_mutex};
-                    cv.wait(lock.m_lock, [&] {
-                        std::cout << "@@@@ wait size " << tc.request_threads.size() << "\n";
-                        return tc.request_threads.find(setup.s_connect) == tc.request_threads.end();
-                    });
-                }
+    auto do_resume{[&] {
+        const Lock lock(setup.server->m_context.loop->m_mutex);
+        if (future) future->fulfiller->fulfill();
+        wait_done = true;
+        cv.notify_all();
+    }};
 
-            } elif (how == How::WAIT_DISCONNECTED) {
-                signal.get_future().get();
-            }
-        }};
-
-        bool call_async{false};
-        if (when == When::BEFORE_CALL) {
-            do_disconnect();
-        } else if (when == When::SYNC_BODY) {
-            // Set m_fn to initiate client disconnect when server is in the middle of
-            // handling the callFn call to make sure this case is handled cleanly.
-            do_disconnect();
-        } else {
-            call_async = true;
-            foo->initThreadMap();
-            setup.server->m_impl->m_fn = [&] {
-                EventLoopRef loop{*setup.server->m_context.loop};
-                if (when == ASYNC_THREAD_BODY) do_disconnect();
-            };
-            setup.server->m_impl->m_start_hook = []{
-                if (when == When::ASYNC_START) do_disconnect();
-                return kj::Promise<bool>{true};
-            };
-            setup.server->m_impl->m_end_hook = []{
-                if (when == When::ASYNC_END) do_disconnect();
-                return kj::READY_NOW;
-            };
-            assert(!setup.server->m_context.loop->m_signal);
-            setup.server->m_context.loop->m_signal = [](const std::any&) {
-                using namespace signals;
-                if (when == When::ASYNC_THREAD_START && s.type() == typeid(CallStart)) do_disconnect();
-                if (when == When::ASYNC_THREAD_SETUP && s.type() == typeid(Setup)) do_disconnect();
-                if (when == When::ASYNC_THREAD_TEARDOWN && s.type() == typeid(CallTeardown)) do_disconnect();
-                if (when == When::ASYNC_THREAD_END && s.type() == typeid(CallEnd)) do_disconnect();
-            };
+    // Helper to trigger disconnection and optionally wait for disconnection to be processed.
+    auto do_disconnect{[&] {
+        {
+            // Add client/server connection callbacks here. Important to do it at last mem
+            const Lock lock(setup.server->m_context.loop->m_mutex);
+            setup.client_connection->m_sync_cleanup_fns.emplace(setup.client_connection->m_sync_cleanup_fns.begin(), [&] {
+                do_when(When::CLIENT_DISCONNECT_START);
+            });
+            setup.client_connection->m_sync_cleanup_fns.emplace(setup.client_connection->m_sync_cleanup_fns.end(), [&] {
+                do_when(When::CLIENT_DISCONNECT_END);
+            });
+            setup.server_connection->m_sync_cleanup_fns.emplace(setup.server_connection->m_sync_cleanup_fns.begin(), [&] {
+                do_when(When::SERVER_DISCONNECT_START);
+            });
+            setup.server_connection->m_sync_cleanup_fns.emplace(setup.server_connection->m_sync_cleanup_fns.end(), [&] {
+                do_when(When::SERVER_DISCONNECT_END);
+            });
         }
 
-        bool disconnected{false};
-        try {
-            if (call_async) foo->callFnAsync(); else foo->callFn();
-        } catch (const std::runtime_error& e) {
-            if (side == Side::CLIENT && when == When::BEFORE_CALL) {
-                KJ_EXPECT(std::string_view{e.what()} == "IPC client method called after disconnect.");
+        if (disconnect_side == Side::CLIENT) setup.client_disconnect();
+        if (disconnect_side == Side::SERVER) setup.server_disconnect();
+    }};
+
+    do_when = [&](When when) {
+        if (when == disconnect_trigger) {
+            // If disconnecting from async thread with Waiter::m_mutex held,
+            // deleting server connection would trigger a deadlock in
+            // ~Connection ProxyClient<Thread> cleanup hook, so need to schedule
+            // running it asynchronously.
+            if (disconnect_side == Side::SERVER && (when == When::ASYNC_THREAD_SETUP || when == When::ASYNC_THREAD_TEARDOWN)) {
+                setup.server->m_context.loop->m_task_set->add(kj::evalLater([&] { do_disconnect(); }));
             } else {
-                KJ_EXPECT(std::string_view{e.what()} == "IPC client method call interrupted by disconnect.");
+                do_disconnect();
             }
-            disconnected = true;
-        }
-        KJ_EXPECT(disconnected);
 
-        // Now that the disconnect has been detected, set signal allowing the
-        // callFn2() IPC call to return. Since signalling may not wake up the
-        // thread right away, it is important for the signal variable to be declared
-        // *before* the TestSetup variable so is not destroyed while
-        // signal.get_future().get() is called.
-        if (call_async) signal.set_value();
+            if (when != disconnect_wait) {
+                // If disconnecting from event loop thread, need to implement
+                // wait by fulfilling a promise, not by blocking the thread.
+                if (when == When::ASYNC_START || when == When::ASYNC_END) {
+                    assert(!future);
+                    future.emplace(kj::newPromiseAndFulfiller<void>());
+                } else {
+                    Lock lock{setup.server->m_context.loop->m_mutex};
+                    cv.wait(lock.m_lock, [&] { return wait_done; });
+                }
+            }
+        }
+        if (when == disconnect_wait) {
+            Lock lock{setup.server->m_context.loop->m_mutex};
+            wait_done = true;
+            cv.notify_all();
+            if (future) future->fulfiller->fulfill();
+        }
+    };
+
+    do_when(When::BEFORE_CALL);
+
+    setup.server->m_impl->m_fn = [&] {
+        EventLoopRef loop{*setup.server->m_context.loop};
+        do_when(When::INSIDE_CALL);
+    };
+
+    assert(!setup.server->m_context.loop->m_signal);
+    setup.server->m_context.loop->m_signal = [&](const std::any& s) {
+        using namespace mp::signals;
+        if (s.type() == typeid(CallStart))    do_when(When::ASYNC_THREAD_START);
+        if (s.type() == typeid(CallSetup))    do_when(When::ASYNC_THREAD_SETUP);
+        if (s.type() == typeid(CallTeardown)) do_when(When::ASYNC_THREAD_TEARDOWN);
+        if (s.type() == typeid(CallEnd))      do_when(When::ASYNC_THREAD_END);
+    };
+
+    setup.server->m_impl->m_start_hook = [&]() -> kj::Promise<bool> {
+        do_when(When::ASYNC_START);
+        if (future) return future->promise.then([] { return true; });
+        return true;
+    };
+
+    setup.server->m_impl->m_end_hook = [&]() -> kj::Promise<void> {
+        do_when(When::ASYNC_END);
+        if (future) return kj::mv(future->promise);
+        return kj::READY_NOW;
+    };
+
+    if (call_type == CallType::ASYNC) foo->initThreadMap();
+
+    bool disconnected{false};
+    try {
+        if (call_type == CallType::ASYNC) foo->callFnAsync(); else foo->callFn();
+    } catch (const std::runtime_error& e) {
+        if (disconnect_side == Side::CLIENT && disconnect_trigger == When::BEFORE_CALL) {
+            KJ_EXPECT(std::string_view{e.what()} == "IPC client method called after disconnect.");
+        } else {
+            KJ_EXPECT(std::string_view{e.what()} == "IPC client method call interrupted by disconnect.");
+        }
+        disconnected = true;
+    }
+    KJ_EXPECT(disconnected);
+    do_when(When::AFTER_CALL);
+}
+
+void DisconnectTest::TestAll()
+{
+    for (auto side : {Side::SERVER, Side::CLIENT}) {
+        // FIXME add more cases
+        Test(When::BEFORE_CALL,           When::BEFORE_CALL,           CallType::SYNC, side);
+        Test(When::INSIDE_CALL,           When::INSIDE_CALL,           CallType::SYNC, side);
+        Test(When::ASYNC_START,           When::ASYNC_START,           CallType::ASYNC, side);
+        Test(When::ASYNC_THREAD_START,    When::ASYNC_THREAD_START,    CallType::ASYNC, side);
+        Test(When::ASYNC_THREAD_SETUP,    When::ASYNC_THREAD_SETUP,    CallType::ASYNC, side);
+        Test(When::INSIDE_CALL,           When::INSIDE_CALL,           CallType::ASYNC, side);
+        Test(When::ASYNC_THREAD_TEARDOWN, When::ASYNC_THREAD_TEARDOWN, CallType::ASYNC, side);
+        Test(When::ASYNC_THREAD_END,      When::ASYNC_THREAD_END,      CallType::ASYNC, side);
+        Test(When::ASYNC_END,             When::ASYNC_END,             CallType::ASYNC, side);
     }
 }
 
 KJ_TEST("Test disconnecting during IPC")
 {
-    DisconnectTest::Run();
+    DisconnectTest::TestAll();
 }
-
 } // namespace test
 } // namespace mp
