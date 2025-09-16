@@ -237,11 +237,12 @@ struct DisconnectTest {
     };
 
     //! After disconnecting, whether to wait for the disconnect to be processed
-    //! on the other end before continuing, or let the disconnect happen
-    //! naturally. Former is useful for letting test deterministically test all
-    //! possible states. Latter is useful for checking to see if there are any
-    //! race conditions, especially with ThreadSanitizer.
-    enum class How { WAIT, YOLO };
+    //! on the other end before continuing, or to wait until the IPC call
+    //! returns, or let the disconnect happen naturally. The first mode is
+    //! useful for letting test deterministically test all possible states. The
+    //! others are useful for checking to see if there are any race conditions,
+    //! especially with ThreadSanitizer.
+    enum class How { WAIT_DISCONNECTED, WAIT_DONE, YOLO };
 
     static void Run();
 
@@ -256,7 +257,7 @@ struct DisconnectTest {
         When::ASYNC_THREAD_END,
         When::ASYNC_END,
     }; }
-    static constexpr auto Hows() { return std::array{How::WAIT, How::YOLO}; }
+    static constexpr auto Hows() { return std::array{How::WAIT_DISCONNECTED, How::WAIT_DONE, How::YOLO}; }
     static constexpr auto Sides() { return std::array{Side::SERVER, Side::CLIENT}; }
     static constexpr const char* Str(When when)
     {
@@ -277,7 +278,8 @@ struct DisconnectTest {
     static constexpr const char* Str(How how)
     {
         switch (how) {
-        case How::WAIT: return "WAIT";
+        case How::WAIT_DISCONNECTED: return "WAIT_DISCONNECTED";
+        case How::WAIT_DONE: return "WAIT_DONE";
         case How::YOLO: return "YOLO";
         }
         assert(0);
@@ -305,10 +307,47 @@ void DisconnectTest::Run()
         ProxyClient<messages::FooInterface>* foo = setup.client.get();
         KJ_EXPECT(foo->add(1, 2) == 3);
 
+        // Condition variable, future and variables, for blocking until a
+        // a disconnect has been handled or the IPC call is done.
+        std::condition_variable cv;
+        std::optional<kj::PromiseFulfillerPair<void>> future;
+        bool disconnect_handled{false}
+        bool ipc_done{false};
+
+        // Helper to trigger disconnection and optionally wait for disconnection to be processed.
         auto do_disconnect{[&] {
+            // Add hook to notify condition variable as the server connection
+            // object is destroyed.
+            {
+                const Lock lock(loop->m_mutex);
+                Connection* conn{side == Side::Server setup.server_connection.get() : setup.client_connection.get()}
+                setup.s_connect->m_sync_cleanup_fns.emplace(setup.s_connect->m_sync_cleanup_fns.end(), [&] {
+                    const Lock lock(loop->m_mutex);
+                    cv.notify_all();
+                });
+            }
+
+            // Sanity check thread disconnect hooks called at expected time.
+            if (when == When::ASYNC_THREAD_SETUP || when == When::ASYNC_THREAD_TEARDOWN) {
+                auto& tc = g_thread_context;
+                auto it = tc.request_threads.find(setup.s_connect);
+                assert(it != tc.request_threads.end());
+            }
+
             if (side == Side::CLIENT) setup.client_disconnect();
             if (side == Side::SERVER) setup.server_disconnect();
-            // FIXME Implement How::WAIT here to wait after disconnecting.
+            if (how == How::WAIT_DISCONNECTED) {
+                if (when == When::ASYNC_THREAD_SETUP || when == When::ASYNC_THREAD_TEARDOWN) {
+                    Lock lock{loop->m_mutex};
+                    cv.wait(lock.m_lock, [&] {
+                        std::cout << "@@@@ wait size " << tc.request_threads.size() << "\n";
+                        return tc.request_threads.find(setup.s_connect) == tc.request_threads.end();
+                    });
+                }
+
+            } elif (how == How::WAIT_DISCONNECTED) {
+                signal.get_future().get();
+            }
         }};
 
         bool call_async{false};
@@ -317,27 +356,29 @@ void DisconnectTest::Run()
         } else if (when == When::SYNC_BODY) {
             // Set m_fn to initiate client disconnect when server is in the middle of
             // handling the callFn call to make sure this case is handled cleanly.
-            // FIXME Set do_disconnect here instead.
-            setup.server->m_impl->m_fn = setup.client_disconnect;
+            do_disconnect();
         } else {
             call_async = true;
             foo->initThreadMap();
             setup.server->m_impl->m_fn = [&] {
                 EventLoopRef loop{*setup.server->m_context.loop};
-                // FIXME Only disconnect here if when == ASYNC_THREAD_BODY.
-                // FIXME Call do_disconnect here instead of client_disconnect().
-                setup.client_disconnect();
-                // FIXME move to do_disconnect and call if How::YOLO is set.
-                signal.get_future().get();
+                if (when == ASYNC_THREAD_BODY) do_disconnect();
             };
-            // FIXME: Call dodisconnect here if when == ASYNC_START
-            setup.server->m_impl->m_start_hook = []{ return kj::Promise<bool>{true}; };
-            // FIXME: Call dodisconnect here if when == ASYNC_END
-            setup.server->m_impl->m_end_hook = []{ return kj::READY_NOW; };
+            setup.server->m_impl->m_start_hook = []{
+                if (when == When::ASYNC_START) do_disconnect();
+                return kj::Promise<bool>{true};
+            };
+            setup.server->m_impl->m_end_hook = []{
+                if (when == When::ASYNC_END) do_disconnect();
+                return kj::READY_NOW;
+            };
             assert(!setup.server->m_context.loop->m_signal);
             setup.server->m_context.loop->m_signal = [](const std::any&) {
-               // FIXME: Call do_disconnect here when == ASYNC_THREAD_* and
-               // std::any parameter contains matching signal.
+                using namespace signals;
+                if (when == When::ASYNC_THREAD_START && s.type() == typeid(CallStart)) do_disconnect();
+                if (when == When::ASYNC_THREAD_SETUP && s.type() == typeid(Setup)) do_disconnect();
+                if (when == When::ASYNC_THREAD_TEARDOWN && s.type() == typeid(CallTeardown)) do_disconnect();
+                if (when == When::ASYNC_THREAD_END && s.type() == typeid(CallEnd)) do_disconnect();
             };
         }
 

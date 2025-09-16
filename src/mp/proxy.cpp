@@ -321,8 +321,8 @@ std::tuple<ConnThread, bool> SetThread(GuardedRef<ConnThreads> threads, Connecti
     bool inserted;
     {
         const Lock lock(threads.mutex);
-        if (connection->m_loop->hasSignal<signals::CallSetup>()) connection->m_loop->sendSignal<signals::CallSetup>();
         std::tie(thread, inserted) = threads.ref.try_emplace(connection);
+        if (connection->m_loop->hasSignal<signals::CallSetup>()) connection->m_loop->sendSignal<signals::CallSetup>();
     }
     if (inserted) {
         thread->second.emplace(make_thread(), connection, /* destroy_connection= */ false);
