@@ -430,4 +430,16 @@ std::string LongThreadName(const char* exe_name)
     return g_thread_context.thread_name.empty() ? ThreadName(exe_name) : g_thread_context.thread_name;
 }
 
+kj::StringPtr KJ_STRINGIFY(Log v)
+{
+    switch (v) {
+        case Log::Trace:   return "Trace";
+        case Log::Debug:   return "Debug";
+        case Log::Info:    return "Info";
+        case Log::Warning: return "Warning";
+        case Log::Error:   return "Error";
+        case Log::Raise:   return "Raise";
+    }
+    return "<Log?>";
+}
 } // namespace mp
