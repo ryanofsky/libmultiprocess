@@ -334,9 +334,9 @@ KJ_TEST("Make simultaneous IPC callbacks with same request_thread and callback_t
         {
             signal.get_future().get();
         }
-        catch(const std::exception& e)
+        catch (const std::future_error& e)
         {
-            KJ_EXPECT(e.what() == std::string("Future already retrieved"));
+            KJ_EXPECT(e.code() == std::make_error_code(std::future_errc::future_already_retrieved));
         }
     };
 
