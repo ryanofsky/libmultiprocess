@@ -72,6 +72,7 @@ in crossPkgs.mkShell {
   ];
   nativeBuildInputs = with pkgs; [
     cmakeBuild
+    gdb
     include-what-you-use
     ninja
   ] ++ lib.optionals (!minimal) [
