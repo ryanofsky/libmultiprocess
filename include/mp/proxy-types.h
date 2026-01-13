@@ -445,6 +445,15 @@ struct ServerCall
     template <typename ServerContext, typename... Args>
     decltype(auto) invoke(ServerContext& server_context, TypeList<>, Args&&... args) const
     {
+        // If cancel_lock is set, release it while executing the method, and
+        // reacquire it afterwards. The lock is needed to prevent params and
+        // response structs from being deleted by the event loop thread if the
+        // request is cancelled, so it is only needed before and after method
+        // execution. It is important to release the lock during execution the
+        // method can take an arbitrarily long time to return and the event loop
+        // will need the lock itself if the call is canceled.
+        if (server_context.cancel_lock) server_context.cancel_lock->m_lock.unlock();
+        KJ_DEFER(if (server_context.cancel_lock) server_context.cancel_lock->m_lock.lock());
         return ProxyServerMethodTraits<typename decltype(server_context.call_context.getParams())::Reads>::invoke(
             server_context,
             std::forward<Args>(args)...);
@@ -469,6 +478,12 @@ struct ServerRet : Parent
     void invoke(ServerContext& server_context, TypeList<>, Args&&... args) const
     {
         auto&& result = Parent::invoke(server_context, TypeList<>(), std::forward<Args>(args)...);
+        // If IPC request was canceled, there is no point continuing to execute.
+        // It's also important to stop executing because the connection may have
+        // been destroyed as described in
+        // https://github.com/bitcoin/bitcoin/issues/34250 and there would be a
+        // crash if execution continued.
+        if (server_context.canceled) throw InterruptException{"canceled"};
         auto&& results = server_context.call_context.getResults();
         InvokeContext& invoke_context = server_context;
         BuildField(TypeList<decltype(result)>(), invoke_context, Make<StructField, Accessor>(results),
