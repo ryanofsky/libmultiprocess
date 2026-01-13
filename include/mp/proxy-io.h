@@ -48,6 +48,11 @@ struct ServerInvokeContext : InvokeContext
     ProxyServer& proxy_server;
     CallContext& call_context;
     int req;
+    //! If the IPC method executes asynchronously (not on the event loop thread)
+    //! and the IPC call was cancelled by the client, or cancelled by a
+    //! disconnection, this is set to true. If the call runs on the event loop
+    //! thread, it can't be cancelled.
+    std::atomic<bool> cancelled{false};
 
     ServerInvokeContext(ProxyServer& proxy_server, CallContext& call_context, int req)
         : InvokeContext{*proxy_server.m_context.connection}, proxy_server{proxy_server}, call_context{call_context}, req{req}
@@ -422,7 +427,7 @@ public:
         // will never run after connection object is destroyed. But when disconnect
         // handler fires, do not call the function f right away, instead add it
         // to the EventLoop TaskSet to avoid "Promise callback destroyed itself"
-        // error in cases where f deletes this Connection object.
+        // error in the typical case where f deletes this Connection object.
         m_on_disconnect.add(m_network.onDisconnect().then(
             [f = std::forward<F>(f), this]() mutable { m_loop->m_task_set->add(kj::evalLater(kj::mv(f))); }));
     }
@@ -430,6 +435,9 @@ public:
     EventLoopRef m_loop;
     kj::Own<kj::AsyncIoStream> m_stream;
     LoggingErrorHandler m_error_handler{*m_loop};
+    //! TaskSet used to cancel the m_network.onDisconnect() handler for remote
+    //! disconnections, if the connection is closed locally first by deleting
+    //! this Connection object.
     kj::TaskSet m_on_disconnect{m_error_handler};
     ::capnp::TwoPartyVatNetwork m_network;
     std::optional<::capnp::RpcSystem<::capnp::rpc::twoparty::VatId>> m_rpc_system;
@@ -441,6 +449,11 @@ public:
     //! Collection of server-side IPC worker threads (ProxyServer<Thread> objects previously returned by
     //! ThreadMap.makeThread) used to service requests to clients.
     ::capnp::CapabilityServerSet<Thread> m_threads;
+
+    //! Canceler for canceling promises that we want to discard when the
+    //! connection is destroyed. This is used to interrupt method calls that are
+    //! still executing at time of disconnection.
+    kj::Canceler m_canceler;
 
     //! Cleanup functions to run if connection is broken unexpectedly.  List
     //! will be empty if all ProxyClient are destroyed cleanly before the
@@ -693,16 +706,20 @@ template<typename T, typename Fn>
 kj::Promise<T> ProxyServer<Thread>::post(Fn&& fn)
 {
     auto ready = kj::newPromiseAndFulfiller<void>(); // Signaled when waiter is idle again.
-    auto ret = m_thread_ready.then([this, fn = std::forward<Fn>(fn), ready_fulfiller = kj::mv(ready.fulfiller)]() mutable {
+    auto cancel_monitor_ptr = kj::heap<CancelMonitor>();
+    CancelMonitor& cancel_monitor = *cancel_monitor_ptr;
+    auto self = thisCap();
+    auto ret = m_thread_ready.then([this, self = std::move(self), fn = std::forward<Fn>(fn), ready_fulfiller = kj::mv(ready.fulfiller), cancel_monitor_ptr = kj::mv(cancel_monitor_ptr)]() mutable {
         auto result = kj::newPromiseAndFulfiller<T>(); // Signaled when fn() is called, with its return value.
-        bool posted = m_thread_context.waiter->post([this, fn = std::forward<Fn>(fn), ready_fulfiller = kj::mv(ready_fulfiller), result_fulfiller = kj::mv(result.fulfiller)]() mutable {
+        bool posted = m_thread_context.waiter->post([this, self = std::move(self), fn = std::forward<Fn>(fn), ready_fulfiller = kj::mv(ready_fulfiller), result_fulfiller = kj::mv(result.fulfiller), cancel_monitor_ptr = kj::mv(cancel_monitor_ptr)]() mutable {
             m_loop->sync([ready_fulfiller = kj::mv(ready_fulfiller)]() mutable {
                 ready_fulfiller->fulfill();
                 ready_fulfiller = nullptr;
             });
             std::optional<T> result_value;
-            kj::Maybe<kj::Exception> exception{kj::runCatchingExceptions([&]{ result_value.emplace(fn()); })};
-            m_loop->sync([&result_value, &exception, result_fulfiller = kj::mv(result_fulfiller)]() mutable {
+            kj::Maybe<kj::Exception> exception{kj::runCatchingExceptions([&]{ result_value.emplace(fn(*cancel_monitor_ptr)); })};
+            m_loop->sync([this, &result_value, &exception, self = kj::mv(self), result_fulfiller = kj::mv(result_fulfiller), cancel_monitor_ptr = kj::mv(cancel_monitor_ptr)]() mutable {
+                cancel_monitor_ptr = nullptr;
                 KJ_IF_MAYBE(e, exception) {
                     assert(!result_value);
                     result_fulfiller->reject(kj::mv(*e));
@@ -712,6 +729,7 @@ kj::Promise<T> ProxyServer<Thread>::post(Fn&& fn)
                     result_value.reset();
                 }
                 result_fulfiller = nullptr;
+                m_loop->m_task_set->add(kj::evalLater([self = kj::mv(self)] {}));
             });
         });
         // Assert that calling Waiter::post did not fail. It could only return
@@ -720,7 +738,7 @@ kj::Promise<T> ProxyServer<Thread>::post(Fn&& fn)
         // is signaled, so this should never happen.
         assert(posted);
         return kj::mv(result.promise);
-    });
+    }).attach(kj::heap<CancelProbe>(cancel_monitor));
     m_thread_ready = kj::mv(ready.promise);
     return ret;
 }
