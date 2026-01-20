@@ -82,11 +82,20 @@ template <>
 struct ProxyServer<Thread> final : public Thread::Server
 {
 public:
-    ProxyServer(ThreadContext& thread_context, std::thread&& thread);
+    ProxyServer(Connection& connection, ThreadContext& thread_context, std::thread&& thread);
     ~ProxyServer();
     kj::Promise<void> getName(GetNameContext context) override;
+
+    //! Run a callback function returning T on this thread.
+    template<typename T, typename Fn>
+    kj::Promise<T> post(Fn&& fn);
+
+    EventLoopRef m_loop;
     ThreadContext& m_thread_context;
     std::thread m_thread;
+    //! Promise signaled when m_thread_context.waiter is idle and there is no
+    //! post() callback function waiting to execute.
+    kj::Promise<void> m_thread_ready{kj::READY_NOW};
 };
 
 //! Handler for kj::TaskSet failed task events.
@@ -322,7 +331,12 @@ public:
 //! thread is blocked waiting for server response, this is what allows the
 //! client to run the request in the same thread, the same way code would run in a
 //! single process, with the callback sharing the same thread stack as the original
-//! call.)
+//! call.) To support this, the clientInvoke function calls Waiter::wait() to
+//! block the client IPC thread while initial request is in progress. Then if
+//! there is a callback, it is executed with Waiter::post().
+//!
+//! The Waiter class is also used server-side by `ProxyServer<Thread>::post()`
+//! to execute IPC calls on worker threads.
 struct Waiter
 {
     Waiter() = default;
@@ -674,6 +688,37 @@ struct ThreadContext
     //! which could deadlock the thread.
     bool loop_thread = false;
 };
+
+template<typename T, typename Fn>
+kj::Promise<T> ProxyServer<Thread>::post(Fn&& fn)
+{
+    auto ready = kj::newPromiseAndFulfiller<void>(); // Signaled when waiter is idle again.
+    auto ret = m_thread_ready.then([this, fn = std::move(fn), ready_fulfiller = kj::mv(ready.fulfiller)]() mutable {
+        auto result = kj::newPromiseAndFulfiller<T>(); // Signaled when fn() is called, with its return value.
+        bool posted = m_thread_context.waiter->post([this, fn = std::move(fn), ready_fulfiller = kj::mv(ready_fulfiller), result_fulfiller = kj::mv(result.fulfiller)]() mutable {
+            m_loop->sync([ready_fulfiller = kj::mv(ready_fulfiller)]() mutable { ready_fulfiller->fulfill(); });
+            std::optional<T> result;
+            kj::Maybe<kj::Exception> exception{kj::runCatchingExceptions([&]{ result.emplace(fn()); })};
+            m_loop->sync([&result, &exception, result_fulfiller = kj::mv(result_fulfiller)]() mutable {
+                KJ_IF_MAYBE(e, exception) {
+                    assert(!result);
+                    result_fulfiller->reject(kj::mv(*e));
+                } else {
+                    assert(result);
+                    result_fulfiller->fulfill(kj::mv(*result));
+                }
+            });
+        });
+        // Assert that calling Waiter::post did not fail. It could only return
+        // false if a new function was posted before the previous one finished
+        // executing, but new functions are only posted when m_thread_ready is
+        // is signaled, so this should never happen.
+        assert(posted);
+        return kj::mv(result.promise);
+    });
+    m_thread_ready = kj::mv(ready.promise);
+    return ret;
+}
 
 //! Given stream file descriptor, make a new ProxyClient object to send requests
 //! over the stream. Also create a new Connection object embedded in the
