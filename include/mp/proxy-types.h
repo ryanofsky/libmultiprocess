@@ -445,6 +445,9 @@ struct ServerCall
     template <typename ServerContext, typename... Args>
     decltype(auto) invoke(ServerContext& server_context, TypeList<>, Args&&... args) const
     {
+        // Release params lock since call_context.getParams() will no longer be
+        // called after this point.
+        if (server_context.params_lock) server_context.params_lock->m_lock.unlock();
         return ProxyServerMethodTraits<typename decltype(server_context.call_context.getParams())::Reads>::invoke(
             server_context,
             std::forward<Args>(args)...);

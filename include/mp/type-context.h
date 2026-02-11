@@ -91,13 +91,20 @@ auto PassField(Priority<1>, TypeList<>, ServerContext& server_context, const Fn&
                     auto& request_threads = thread_context.request_threads;
                     ConnThread request_thread;
                     bool inserted;
+                    Mutex params_mutex;
+                    Lock params_lock{params_mutex};
+                    server_context.params_lock = &params_lock;
                     server.m_context.loop->sync([&] {
                         // Detect request being cancelled before or while it executes.
                         if (cancel_monitor.m_cancelled) MP_LOG(*server.m_context.loop, Log::Raise) << "IPC server request #" << req << " cancelled before it could be executed";
                         assert(!cancel_monitor.m_on_cancel);
-                        cancel_monitor.m_on_cancel = [&server, &server_context, req]() {
+                        cancel_monitor.m_on_cancel = [&server, &server_context, &params_mutex, req]() {
                             MP_LOG(*server.m_context.loop, Log::Error) << "IPC server request #" << req << " cancelled while executing.";
                             server_context.cancelled = true;
+                            // Wait for params_mutex to be released by the
+                            // execution thread before returning to the event
+                            // loop and letting parameters to be deleted.
+                            Lock{params_mutex};
                         };
 
                         // Update requests_threads map if not cancelled.

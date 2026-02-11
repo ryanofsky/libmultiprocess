@@ -47,6 +47,12 @@ struct ServerInvokeContext : InvokeContext
 
     ProxyServer& proxy_server;
     CallContext& call_context;
+    //! Lock used to protect access to call_context.getParams() data when the
+    //! IPC method executes asynchronously (not on the event loop thread). This
+    //! lock is needed in case there is a cancellation or disconnect during
+    //! execution that could cause the parameters to be deleted from the event
+    //! loop thread while they are accessed from the execution thread.
+    Lock* params_lock{nullptr};
     int req;
     //! If the IPC method executes asynchronously (not on the event loop thread)
     //! and the IPC call was cancelled by the client, or cancelled by a
