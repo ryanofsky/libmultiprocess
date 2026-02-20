@@ -20,7 +20,12 @@
 #include <mp/type-map.h>
 #include <mp/type-message.h>
 #include <mp/type-number.h>
+<<<<<<< HEAD
 #include <mp/type-pointer.h>
+||||||| parent of 26fdbad (mpgen: support primitive std::optional struct fields)
+=======
+#include <mp/type-optional.h>
+>>>>>>> 26fdbad (mpgen: support primitive std::optional struct fields)
 #include <mp/type-set.h>
 #include <mp/type-string.h>
 #include <mp/type-struct.h>
