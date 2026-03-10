@@ -193,6 +193,9 @@ auto PassField(Priority<1>, TypeList<>, ServerContext& server_context, const Fn&
                     }
                     // End of scope: if KJ_DEFER was reached, it runs here
                 }
+#ifndef NDEBUG
+                if (server.m_context.testing_hook_after_cleanup) server.m_context.testing_hook_after_cleanup();
+#endif
                 return call_context;
             };
 
