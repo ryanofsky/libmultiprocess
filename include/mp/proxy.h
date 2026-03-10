@@ -70,6 +70,11 @@ struct ProxyContext
     Connection* connection;
     EventLoopRef loop;
     CleanupList cleanup_fns;
+#ifndef NDEBUG
+    //! Hook called on the worker thread just before loop->sync() in PassField
+    //! for Context arguments. Used by tests to inject precise disconnect timing.
+    std::function<void()> testing_hook_before_sync;
+#endif
 
     ProxyContext(Connection* connection);
 };
