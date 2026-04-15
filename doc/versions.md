@@ -9,6 +9,7 @@ include.
 
 ## v12
 - Current unstable version.
+<<<<<<< HEAD
 - Adds an optional per-listener `max_connections` parameter to `ListenConnections()`
   so servers can stop accepting new connections when a local connection cap is reached,
   and resume accepting after existing connections disconnect.
@@ -25,6 +26,13 @@ include.
 - Build improvements: makes `target_capnp_sources` work correctly when libmultiprocess is used as a CMake subproject ([#289](https://github.com/bitcoin-core/libmultiprocess/pull/289)), adds `mp_headers` target for better lint tool support ([#291](https://github.com/bitcoin-core/libmultiprocess/pull/291)), and fixes compatibility with recent Nix and CMake 4.0 ([#238](https://github.com/bitcoin-core/libmultiprocess/pull/238)).
 - Test, CI, documentation, and minor code improvements: design document corrections ([#278](https://github.com/bitcoin-core/libmultiprocess/pull/278)), field constant comments ([#279](https://github.com/bitcoin-core/libmultiprocess/pull/279)), clang-tidy fix ([#292](https://github.com/bitcoin-core/libmultiprocess/pull/292)), new smoke test for double-precision float values ([#294](https://github.com/bitcoin-core/libmultiprocess/pull/294)), new test for recursive async IPC calls ([#301](https://github.com/bitcoin-core/libmultiprocess/pull/301)), removal of libevent from Core CI builds ([#299](https://github.com/bitcoin-core/libmultiprocess/pull/299)), and rename of `EventLoop::m_num_clients` to `m_num_refs` ([#302](https://github.com/bitcoin-core/libmultiprocess/pull/302)).
 - Used in Bitcoin Core master branch, pulled in by [#35661](https://github.com/bitcoin/bitcoin/pull/35661).
+||||||| parent of c1aecbc (doc: Bump version 11 > 12)
+=======
+- Adds support for nonunix platforms, making API changes that are not backwards compatible.
+
+## [v11.0](https://github.com/bitcoin-core/libmultiprocess/commits/v11.0)
+- Improves debug output if EventLoop::post callback fails.
+>>>>>>> c1aecbc (doc: Bump version 11 > 12)
 
 ## [v10.0](https://github.com/bitcoin-core/libmultiprocess/commits/v10.0)
 - Increases spawn test timeout to avoid spurious failures.
