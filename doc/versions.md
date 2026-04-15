@@ -7,9 +7,19 @@ Library versions are tracked with simple
 Versioning policy is described in the [version.h](../include/mp/version.h)
 include.
 
+<<<<<<< HEAD
 ## v14
 - Adds support for nonunix platforms, making API changes that are not backwards compatible ([#274](https://github.com/bitcoin-core/libmultiprocess/pull/274)).
+||||||| parent of b15d63e (doc: Bump version 11 > 12)
+## v11
+=======
+## v12
+>>>>>>> b15d63e (doc: Bump version 11 > 12)
 - Current unstable version.
+- Adds support for nonunix platforms, making API changes that are not backwards compatible.
+
+## [v11.0](https://github.com/bitcoin-core/libmultiprocess/commits/v11.0)
+- Improves debug output if EventLoop::post callback fails.
 
 ## [v13.0](https://github.com/bitcoin-core/libmultiprocess/commits/v13.0)
 - Fixes a `memcpy` ubsan warning by using `std::ranges::copy` ([#305](https://github.com/bitcoin-core/libmultiprocess/pull/305)).

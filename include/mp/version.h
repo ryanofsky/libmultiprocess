@@ -24,7 +24,13 @@
 //! pointing at the prior merge commit. The /doc/versions.md file should also be
 //! updated, noting any significant or incompatible changes made since the
 //! previous version.
+<<<<<<< HEAD
 #define MP_MAJOR_VERSION 14
+||||||| parent of b15d63e (doc: Bump version 11 > 12)
+#define MP_MAJOR_VERSION 11
+=======
+#define MP_MAJOR_VERSION 12
+>>>>>>> b15d63e (doc: Bump version 11 > 12)
 
 //! Minor version number. Should be incremented in stable branches after
 //! backporting changes. The /doc/versions.md file should also be updated to
