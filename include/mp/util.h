@@ -362,6 +362,10 @@ SocketId SpawnProcess(ProcessId& pid, FdToArgsFn&& fd_to_args);
 //! it returns. Returns child process id and socket id.
 std::tuple<ProcessId, SocketId> SpawnProcess(ConnectInfoToArgsFn&& connect_info_to_args);
 
+//! Spawn a process and return its process id. Caller should call WaitProcess
+//! on the returned id.
+ProcessId SpawnProcess(const std::vector<std::string>& args);
+
 //! Initialize spawned child process using the ConnectInfo string passed to it,
 //! returning a socket id for communicating with the parent process.
 SocketId StartSpawned(const ConnectInfo& connect_info);
