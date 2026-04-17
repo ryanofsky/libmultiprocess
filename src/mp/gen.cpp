@@ -282,7 +282,20 @@ static void Generate(kj::StringPtr src_prefix,
     }
     args.emplace_back("--output=" capnp_PREFIX "/bin/capnpc-c++");
     args.emplace_back(src_file);
+<<<<<<< HEAD
     const int status = mp::WaitProcess(mp::StartProcess(args));
+||||||| parent of b16f8c4 (util, refactor: Handle forking inside ExecProcess)
+    const int pid = fork();
+    if (pid == -1) {
+        throw std::system_error(errno, std::system_category(), "fork");
+    }
+    if (!pid) {
+        mp::ExecProcess(args);
+    }
+    const int status = mp::WaitProcess(pid);
+=======
+    const int status = mp::WaitProcess(mp::ExecProcess(args));
+>>>>>>> b16f8c4 (util, refactor: Handle forking inside ExecProcess)
     if (status) {
         throw std::runtime_error("Invoking " capnp_PREFIX "/bin/capnp failed");
     }

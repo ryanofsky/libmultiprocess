@@ -215,14 +215,42 @@ SocketId StartSpawned(const ConnectInfo& connect_info)
 >>>>>>> beaa50a (util, refactor: Add ConnectInfo type alias and use it)
 }
 
+<<<<<<< HEAD
 SocketId StartSpawned(const SpawnConnectInfo& connect_info)
+||||||| parent of b16f8c4 (util, refactor: Handle forking inside ExecProcess)
+void ExecProcess(const std::vector<std::string>& args)
+=======
+ProcessId ExecProcess(const std::vector<std::string>& args)
+>>>>>>> b16f8c4 (util, refactor: Handle forking inside ExecProcess)
 {
+<<<<<<< HEAD
     try {
         return std::stoi(connect_info);
     } catch (const std::exception&) {
         throw std::system_error(EINVAL, std::system_category(),
             std::string("StartSpawned: invalid connect_info '") + connect_info + "'");
+||||||| parent of b16f8c4 (util, refactor: Handle forking inside ExecProcess)
+    const std::vector<char*> argv{MakeArgv(args)};
+    if (execvp(argv[0], argv.data()) != 0) {
+        perror("execvp failed");
+        if (errno == ENOENT && !args.empty()) {
+            std::cerr << "Missing executable: " << fs::weakly_canonical(args.front()) << '\n';
+        }
+        _exit(1);
+=======
+    const std::vector<char*> argv{MakeArgv(args)};
+    ProcessId pid;
+    KJ_SYSCALL(pid = fork());
+    if (pid) return pid;
+    if (execvp(argv[0], argv.data()) != 0) {
+        perror("execvp failed");
+        if (errno == ENOENT && !args.empty()) {
+            std::cerr << "Missing executable: " << fs::weakly_canonical(args.front()) << '\n';
+        }
+        _exit(1);
+>>>>>>> b16f8c4 (util, refactor: Handle forking inside ExecProcess)
     }
+    KJ_UNREACHABLE;
 }
 
 <<<<<<< HEAD

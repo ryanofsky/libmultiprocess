@@ -361,6 +361,7 @@ std::tuple<ProcessId, SocketId> SpawnProcess(ConnectInfoToArgsFn&& connect_info_
 SocketId StartSpawned(const ConnectInfo& connect_info);
 >>>>>>> beaa50a (util, refactor: Add ConnectInfo type alias and use it)
 
+<<<<<<< HEAD
 //! Initialize spawned child process using the SpawnConnectInfo string passed to it,
 //! returning a socket id for communicating with the parent process.
 SocketId StartSpawned(const SpawnConnectInfo& connect_info);
@@ -372,6 +373,16 @@ std::array<SocketId, 2> SocketPair();
 //! Start a process and return its process id. Caller should call WaitProcess
 //! on the returned id.
 ProcessId StartProcess(const std::vector<std::string>& args);
+||||||| parent of b16f8c4 (util, refactor: Handle forking inside ExecProcess)
+//! Call execvp with vector args.
+//! Not safe to call in a post-fork child of a multi-threaded process.
+//! Currently only used by mpgen at build time.
+void ExecProcess(const std::vector<std::string>& args);
+=======
+//! Start a process and return its process id. Caller should call WaitProcess
+//! on the returned id.
+ProcessId ExecProcess(const std::vector<std::string>& args);
+>>>>>>> b16f8c4 (util, refactor: Handle forking inside ExecProcess)
 
 //! Wait for a process to exit and return its exit code.
 int WaitProcess(ProcessId pid);
