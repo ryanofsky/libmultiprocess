@@ -314,6 +314,7 @@ static constexpr int FIELD_BOXED = 16;    //!< See Accessor::boxed.
 template <typename Field, int flags>
 struct Accessor : public Field
 {
+<<<<<<< HEAD
     //! Field is present from the Cap'n Proto Params struct (client -> server).
     static const bool in = flags & FIELD_IN;
     //! Field is present from the Cap'n Proto Results struct (server -> client).
@@ -330,6 +331,19 @@ struct Accessor : public Field
     //! Field is a Cap'n Proto pointer type (struct, list, text, data,
     //! interface) as opposed to a primitive type (bool, int, float, enum).
     static const bool boxed = flags & FIELD_BOXED;
+||||||| parent of 362d416 (proxy, refactor: Fix C4305 truncation warning in Accessor on MSVC)
+    static const bool in = flags & FIELD_IN;
+    static const bool out = flags & FIELD_OUT;
+    static const bool optional = flags & FIELD_OPTIONAL;
+    static const bool requested = flags & FIELD_REQUESTED;
+    static const bool boxed = flags & FIELD_BOXED;
+=======
+    static constexpr bool in = (flags & FIELD_IN) != 0;
+    static constexpr bool out = (flags & FIELD_OUT) != 0;
+    static constexpr bool optional = (flags & FIELD_OPTIONAL) != 0;
+    static constexpr bool requested = (flags & FIELD_REQUESTED) != 0;
+    static constexpr bool boxed = (flags & FIELD_BOXED) != 0;
+>>>>>>> 362d416 (proxy, refactor: Fix C4305 truncation warning in Accessor on MSVC)
 };
 
 //! Wrapper around std::function for passing std::function objects between client and servers.
