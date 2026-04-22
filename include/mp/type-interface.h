@@ -54,12 +54,20 @@ void CustomBuildField(TypeList<Impl&>,
     Priority<1>,
     InvokeContext& invoke_context,
     Impl& value,
+<<<<<<< HEAD
     Output&& output)
+||||||| parent of 3fd227c (type-interface, refactor: Fix typename decltype() SFINAE in CustomBuildField on MSVC)
+    Output&& output,
+    typename decltype(output.get())::Calls* enable = nullptr)
+=======
+    Output&& output,
+    typename Decay<decltype(output.get())>::Calls* enable = nullptr)
+>>>>>>> 3fd227c (type-interface, refactor: Fix typename decltype() SFINAE in CustomBuildField on MSVC)
 {
     // Disable deleter so proxy server object doesn't attempt to delete the
     // wrapped implementation when the proxy client is destroyed or
     // disconnected.
-    using Interface = typename decltype(output.get())::Calls;
+    using Interface = typename Decay<decltype(output.get())>::Calls;
     output.set(CustomMakeProxyServer<Interface, Impl>(invoke_context, std::shared_ptr<Impl>(&value, [](Impl*){})));
 }
 
