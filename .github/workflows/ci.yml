@@ -1,0 +1,11 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  ci:
+    # TODO: Change ryanofsky to bitcoin-core when moving from fork to production.
+    uses: ryanofsky/libmultiprocess/.github/workflows/ci.yml@support
+    secrets: inherit
