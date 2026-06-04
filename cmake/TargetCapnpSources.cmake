@@ -81,7 +81,14 @@ function(target_capnp_sources target include_prefix)
   set(generated_headers "")
   foreach(capnp_file IN LISTS TCS_UNPARSED_ARGUMENTS)
     add_custom_command(
-      OUTPUT ${capnp_file}.c++ ${capnp_file}.h ${capnp_file}.proxy-client.c++ ${capnp_file}.proxy-types.h ${capnp_file}.proxy-server.c++ ${capnp_file}.proxy-types.c++ ${capnp_file}.proxy.h
+      OUTPUT
+        ${CMAKE_CURRENT_BINARY_DIR}/${capnp_file}.c++
+        ${CMAKE_CURRENT_BINARY_DIR}/${capnp_file}.h
+        ${CMAKE_CURRENT_BINARY_DIR}/${capnp_file}.proxy-client.c++
+        ${CMAKE_CURRENT_BINARY_DIR}/${capnp_file}.proxy-types.h
+        ${CMAKE_CURRENT_BINARY_DIR}/${capnp_file}.proxy-server.c++
+        ${CMAKE_CURRENT_BINARY_DIR}/${capnp_file}.proxy-types.c++
+        ${CMAKE_CURRENT_BINARY_DIR}/${capnp_file}.proxy.h
       COMMAND ${MPGEN_BINARY} ${CMAKE_CURRENT_SOURCE_DIR} ${include_prefix} ${CMAKE_CURRENT_SOURCE_DIR}/${capnp_file} ${TCS_IMPORT_PATHS} ${mp_include_dir}
       DEPENDS ${capnp_file}
       VERBATIM
@@ -98,7 +105,7 @@ function(target_capnp_sources target include_prefix)
         ${CMAKE_CURRENT_BINARY_DIR}/${capnp_file}.proxy-types.c++
       )
     endif()
-    list(APPEND generated_headers ${capnp_file}.h)
+    list(APPEND generated_headers ${CMAKE_CURRENT_BINARY_DIR}/${capnp_file}.h)
   endforeach()
 
   # Translate include_prefix from a source path to a binary path and add it as a
