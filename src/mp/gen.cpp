@@ -330,8 +330,13 @@ static void Generate(kj::StringPtr src_prefix,
     cpp_client << "#include <" << include_path << ".h>\n";
     cpp_client << "#include <" << include_path << ".proxy.h>\n";
     cpp_client << "#include <" << include_path << ".proxy-types.h>\n";
+<<<<<<< HEAD
     cpp_client << "#include <capnp/capability.h>\n";
     cpp_client << "#include <capnp/common.h>\n";
+||||||| parent of 039e5ac (mpgen: iwyu changes required by previous commit)
+=======
+    cpp_client << "#include <capnp/capability.h>\n";
+>>>>>>> 039e5ac (mpgen: iwyu changes required by previous commit)
     cpp_client << "#include <capnp/generated-header-support.h>\n";
     cpp_client << "#include <cstring>\n";
     cpp_client << "#include <functional>\n";
@@ -339,8 +344,13 @@ static void Generate(kj::StringPtr src_prefix,
     cpp_client << "#include <map>\n";
     cpp_client << "#include <mp/proxy.h>\n";
     cpp_client << "#include <mp/util.h>\n";
+<<<<<<< HEAD
     cpp_client << "#include <string>\n";
     cpp_client << "#include <vector>\n";
+||||||| parent of 039e5ac (mpgen: iwyu changes required by previous commit)
+=======
+    cpp_client << "#include <vector>\n";
+>>>>>>> 039e5ac (mpgen: iwyu changes required by previous commit)
     cpp_client << "#include <" << PROXY_TYPES << ">\n";
     cpp_client << "// IWYU pragma: end_keep\n\n";
     cpp_client << "namespace mp {\n";
