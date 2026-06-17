@@ -740,21 +740,70 @@ struct ThreadContext
     bool loop_thread = false;
 };
 
+//! Shared execution helper for ProxyServer<Thread>::post(). Runs
+//! fn(cancel_monitor) on the calling thread, then posts to the event loop to
+//! fulfill or reject the promise.
+//!
+//! If deferred_cleanup is provided, it is destroyed inside an evalLater() after
+//! the promise is settled. This is used by ProxyServer<Thread>::post() to
+//! defer destruction of its `self` capability reference: the ProxyServer<Thread>
+//! destructor joins the worker thread, so it cannot run synchronously inside the
+//! sync() call (which itself is called from that thread).
+template <typename T, typename Fn>
+void InvokeAndFulfill(EventLoop& loop, Fn& fn,
+    kj::Own<kj::PromiseFulfiller<T>> fulfiller,
+    kj::Own<CancelMonitor> cancel_ptr,
+    std::optional<kj::Function<void()>> deferred_cleanup = std::nullopt)
+{
+    std::optional<T> result_value;
+    kj::Maybe<kj::Exception> exception{
+        kj::runCatchingExceptions([&]{ result_value.emplace(fn(*cancel_ptr)); })
+    };
+    loop.sync([&loop, &result_value, &exception,
+               fulfiller = kj::mv(fulfiller),
+               cancel_ptr = kj::mv(cancel_ptr),
+               deferred_cleanup = std::move(deferred_cleanup)]() mutable {
+        // Destroy CancelMonitor before fulfilling so it is not triggered when
+        // the promise is destroyed.
+        cancel_ptr = nullptr;
+        // Send results to the fulfiller. Technically it would be ok to skip
+        // this if the promise was canceled, but it is simpler to do it
+        // unconditionally.
+        KJ_IF_MAYBE(e, exception) {
+            assert(!result_value);
+            fulfiller->reject(kj::mv(*e));
+        } else {
+            assert(result_value);
+            fulfiller->fulfill(kj::mv(*result_value));
+            result_value.reset();
+        }
+        fulfiller = nullptr;
+        // Defer cleanup outside this sync() call if provided. evalLater
+        // ensures that if deferred_cleanup drops the last reference to a
+        // ProxyServer<Thread>, its destructor's thread join does not happen
+        // synchronously here (which would deadlock since we are on the event
+        // loop thread and the worker thread is the one calling sync()).
+        if (deferred_cleanup) {
+            loop.m_task_set->add(kj::evalLater([dc = std::move(*deferred_cleanup)]() mutable {}));
+        }
+    });
+}
+
 template<typename T, typename Fn>
 kj::Promise<T> ProxyServer<Thread>::post(Fn&& fn)
 {
     auto ready = kj::newPromiseAndFulfiller<void>(); // Signaled when waiter is ready to post again.
-    auto cancel_monitor_ptr = kj::heap<CancelMonitor>();
-    CancelMonitor& cancel_monitor = *cancel_monitor_ptr;
+    auto cancel_ptr = kj::heap<CancelMonitor>();
+    CancelMonitor& cancel_monitor = *cancel_ptr;
     // Keep a reference to the ProxyServer<Thread> instance by assigning it to
     // the self variable. ProxyServer instances are reference-counted and if the
     // client drops its reference, this variable keeps the instance alive until
     // the thread finishes executing. The self variable needs to be destroyed on
-    // the event loop thread so it is freed in a sync() call below.
+    // the event loop thread so it is freed via evalLater in InvokeAndFulfill.
     auto self = thisCap();
-    auto ret = m_thread_ready.then([this, self = std::move(self), fn = std::forward<Fn>(fn), ready_fulfiller = kj::mv(ready.fulfiller), cancel_monitor_ptr = kj::mv(cancel_monitor_ptr)]() mutable {
+    auto ret = m_thread_ready.then([this, self = std::move(self), fn = std::forward<Fn>(fn), ready_fulfiller = kj::mv(ready.fulfiller), cancel_ptr = kj::mv(cancel_ptr)]() mutable {
         auto result = kj::newPromiseAndFulfiller<T>(); // Signaled when fn() is called, with its return value.
-        bool posted = m_thread_context.waiter->post([this, self = std::move(self), fn = std::forward<Fn>(fn), ready_fulfiller = kj::mv(ready_fulfiller), result_fulfiller = kj::mv(result.fulfiller), cancel_monitor_ptr = kj::mv(cancel_monitor_ptr)]() mutable {
+        bool posted = m_thread_context.waiter->post([this, self = std::move(self), fn = std::forward<Fn>(fn), ready_fulfiller = kj::mv(ready_fulfiller), result_fulfiller = kj::mv(result.fulfiller), cancel_ptr = kj::mv(cancel_ptr)]() mutable {
             // Fulfill ready.promise now, as soon as the Waiter starts executing
             // this lambda, so the next ProxyServer<Thread>::post() call can
             // immediately call waiter->post(). It is important to do this
@@ -767,31 +816,8 @@ kj::Promise<T> ProxyServer<Thread>::post(Fn&& fn)
                 ready_fulfiller->fulfill();
                 ready_fulfiller = nullptr;
             });
-            std::optional<T> result_value;
-            kj::Maybe<kj::Exception> exception{kj::runCatchingExceptions([&]{ result_value.emplace(fn(*cancel_monitor_ptr)); })};
-            m_loop->sync([this, &result_value, &exception, self = kj::mv(self), result_fulfiller = kj::mv(result_fulfiller), cancel_monitor_ptr = kj::mv(cancel_monitor_ptr)]() mutable {
-                // Destroy CancelMonitor here before fulfilling or rejecting the
-                // promise so it doesn't get triggered when the promise is
-                // destroyed.
-                cancel_monitor_ptr = nullptr;
-                // Send results to the fulfiller. Technically it would be ok to
-                // skip this if promise was canceled, but it's simpler to just
-                // do it unconditionally.
-                KJ_IF_MAYBE(e, exception) {
-                    assert(!result_value);
-                    result_fulfiller->reject(kj::mv(*e));
-                } else {
-                    assert(result_value);
-                    result_fulfiller->fulfill(kj::mv(*result_value));
-                    result_value.reset();
-                }
-                result_fulfiller = nullptr;
-                // Use evalLater to destroy the ProxyServer<Thread> self
-                // reference, if it is the last reference, because the
-                // ProxyServer<Thread> destructor needs to join the thread,
-                // which can't happen until this sync() block has exited.
-                m_loop->m_task_set->add(kj::evalLater([self = kj::mv(self)] {}));
-            });
+            InvokeAndFulfill<T>(*m_loop, fn, kj::mv(result_fulfiller), kj::mv(cancel_ptr),
+                std::optional<kj::Function<void()>>{[self = kj::mv(self)]() mutable {}});
         });
         // Assert that calling Waiter::post did not fail. It could only return
         // false if a new function was posted before the previous one finished
