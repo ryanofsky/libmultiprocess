@@ -200,6 +200,20 @@ auto PassField(Priority<1>, TypeList<>, ServerContext& server_context, const Fn&
     // asynchronously with getLocalServer().
     const auto& params = server_context.call_context.getParams();
     Context::Reader context_arg = Accessor::get(params);
+
+    // If context.thread is not set, dispatch to the thread pool if one exists.
+    if (!context_arg.hasThread()) {
+        auto* pool = server.m_context.connection->m_thread_pool.get();
+        if (pool) {
+            MP_LOG(loop, Log::Debug) << "IPC server pool dispatch request #" << req;
+            return server.m_context.connection->m_canceler.wrap(
+                pool->template post<typename ServerContext::CallContext>(std::move(invoke)));
+        }
+        MP_LOG(loop, Log::Error)
+            << "IPC server error request #" << req << ", missing thread to execute request";
+        throw std::runtime_error("no thread or pool to execute request");
+    }
+
     auto thread_client = context_arg.getThread();
     auto result = server.m_context.connection->m_threads.getLocalServer(thread_client)
         .then([&loop, invoke = kj::mv(invoke), req](const kj::Maybe<Thread::Server&>& perhaps) mutable {

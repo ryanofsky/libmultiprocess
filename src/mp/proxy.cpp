@@ -413,6 +413,94 @@ kj::Promise<void> ProxyServer<Thread>::getName(GetNameContext context)
     return kj::READY_NOW;
 }
 
+ThreadPool::~ThreadPool()
+{
+    // Signal all workers to exit, then wait for each to erase itself from
+    // m_threads (which happens after it finishes any in-progress work and
+    // completes its cleanup on the event loop thread).
+    {
+        Lock lock(m_mutex);
+        m_target_count = 0;
+        m_cv.notify_all();
+    }
+    Lock lock(m_mutex);
+    m_cv.wait(lock.m_lock, [&]() MP_REQUIRES(m_mutex) { return m_threads.empty(); });
+}
+
+void ThreadPool::resize(uint32_t count)
+{
+    Lock lock(m_mutex);
+    m_target_count = count;
+    // Spawn additional threads until active count meets target. m_active_count
+    // tracks threads that have not yet committed to exit, so it correctly
+    // reflects the effective pool size even while some threads are still
+    // completing their cleanup.
+    while (m_active_count < m_target_count) {
+        m_active_count++;
+        m_threads.emplace_back();
+        auto it = std::prev(m_threads.end());
+        *it = std::thread([this, it] { workerLoop(it); });
+    }
+    // Wake excess threads so they can notice m_active_count > m_target_count
+    // and exit.
+    m_cv.notify_all();
+}
+
+void ThreadPool::workerLoop(std::list<std::thread>::iterator it)
+{
+    g_thread_context.thread_name = ThreadName(m_connection.m_loop->m_exe_name) + " (pool)";
+    // Waiter is needed for the same reason as in makeThread: if an in-flight
+    // request makes a callback IPC call back to the client, clientInvoke uses
+    // g_thread_context.waiter to block this thread while waiting for the result.
+    g_thread_context.waiter = std::make_unique<Waiter>();
+
+    while (true) {
+        kj::Function<void()> work;
+        {
+            Lock lock(m_mutex);
+            m_cv.wait(lock.m_lock, [&]() MP_REQUIRES(m_mutex) {
+                return !m_queue.empty() || m_active_count > m_target_count;
+            });
+            if (m_active_count > m_target_count) {
+                // Decrement immediately inside the lock so that other waking
+                // threads see the updated count and do not also decide to exit.
+                m_active_count--;
+                break;
+            }
+            work = kj::mv(m_queue.front());
+            m_queue.pop();
+        }
+        work();
+    }
+
+    // Clear Thread::Client capability maps on the event loop thread before
+    // exiting. This mirrors what ~ProxyServer<Thread>() does for makeThread
+    // threads. Capture thread-local references now because g_thread_context
+    // inside the sync lambda would refer to the event loop thread's context.
+    Waiter& thread_waiter = *g_thread_context.waiter;
+    ConnThreads& request_threads = g_thread_context.request_threads;
+    ConnThreads& callback_threads = g_thread_context.callback_threads;
+    // MP_NO_TSA: thread_waiter is *g_thread_context.waiter but TSA cannot see
+    // through the reference, so suppress the false positive.
+    m_connection.m_loop->sync([&]() MP_NO_TSA {
+        const Lock lock(thread_waiter.m_mutex);
+        request_threads.clear();
+        callback_threads.clear();
+    });
+
+    // Detach and remove this thread's handle from the list, then notify the
+    // destructor (which may be waiting for the list to become empty).
+    {
+        Lock lock(m_mutex);
+        it->detach();
+        m_threads.erase(it);
+        m_cv.notify_all();
+    }
+    // Thread exits here. g_thread_context (including waiter) is destroyed as a
+    // thread-local when the OS thread exits; that is safe because it holds no
+    // IPC capability handles after the cleanup sync above.
+}
+
 ProxyServer<ThreadMap>::ProxyServer(Connection& connection) : m_connection(connection) {}
 
 kj::Promise<void> ProxyServer<ThreadMap>::makeThread(MakeThreadContext context)
@@ -434,6 +522,15 @@ kj::Promise<void> ProxyServer<ThreadMap>::makeThread(MakeThreadContext context)
     auto thread_server = kj::heap<ProxyServer<Thread>>(m_connection, *thread_context.get_future().get(), std::move(thread));
     auto thread_client = m_connection.m_threads.add(kj::mv(thread_server));
     context.getResults().setResult(kj::mv(thread_client));
+    return kj::READY_NOW;
+}
+
+kj::Promise<void> ProxyServer<ThreadMap>::makePool(MakePoolContext context)
+{
+    if (!m_connection.m_thread_pool) {
+        m_connection.m_thread_pool = std::make_unique<ThreadPool>(m_connection);
+    }
+    m_connection.m_thread_pool->resize(context.getParams().getCount());
     return kj::READY_NOW;
 }
 

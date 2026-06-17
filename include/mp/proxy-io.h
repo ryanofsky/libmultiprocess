@@ -16,9 +16,11 @@
 #include <condition_variable>
 #include <functional>
 #include <kj/function.h>
+#include <list>
 #include <map>
 #include <memory>
 #include <optional>
+#include <queue>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -414,6 +416,53 @@ struct Waiter
     std::optional<kj::Function<void()>> m_fn MP_GUARDED_BY(m_mutex);
 };
 
+//! Thread pool owned by a Connection that services requests arriving with no
+//! explicit context.thread handle. Callers invoke makePool(n) via the ThreadMap
+//! RPC interface to set the desired worker count; makePool(0) (or connection
+//! teardown) drains remaining workers.
+//!
+//! Each worker runs workerLoop(), which:
+//!  - initialises g_thread_context.waiter so in-flight IPC callbacks work the
+//!    same way they do for makeThread threads
+//!  - pops work items from m_queue and executes them until told to exit
+//!  - clears g_thread_context capability maps on the event loop thread before
+//!    erasing itself from m_threads
+class ThreadPool
+{
+public:
+    explicit ThreadPool(Connection& connection) : m_connection(connection) {}
+    ~ThreadPool();
+
+    //! Adjust the number of worker threads. n=0 causes all workers to exit.
+    //! Safe to call repeatedly to grow, shrink, or shut down the pool.
+    void resize(uint32_t count);
+
+    //! Post a work item to the pool. Returns a promise that is fulfilled with
+    //! fn(cancel_monitor) when a worker executes the item. Throws if the pool
+    //! has zero target threads.
+    template <typename T, typename Fn>
+    kj::Promise<T> post(Fn&& fn);
+
+private:
+    void workerLoop(std::list<std::thread>::iterator it);
+
+    Connection& m_connection;
+    Mutex m_mutex;
+    std::condition_variable m_cv MP_GUARDED_BY(m_mutex);
+    std::queue<kj::Function<void()>> m_queue MP_GUARDED_BY(m_mutex);
+    //! All thread handles, including threads that are currently exiting.
+    //! Threads erase themselves from the list after completing cleanup, and the
+    //! destructor waits for the list to become empty before returning.
+    std::list<std::thread> m_threads MP_GUARDED_BY(m_mutex);
+    //! Number of threads that have not yet committed to exit. Decremented
+    //! immediately when a thread decides to exit (inside the lock), so resize()
+    //! can correctly calculate how many additional threads need to be spawned
+    //! even while previous threads are still completing their cleanup.
+    uint32_t m_active_count MP_GUARDED_BY(m_mutex) = 0;
+    //! Desired number of active worker threads.
+    uint32_t m_target_count MP_GUARDED_BY(m_mutex) = 0;
+};
+
 //! Object holding network & rpc state associated with either an incoming server
 //! connection, or an outgoing client connection. It must be created and destroyed
 //! on the event loop thread.
@@ -476,6 +525,10 @@ public:
     //! Collection of server-side IPC worker threads (ProxyServer<Thread> objects previously returned by
     //! ThreadMap.makeThread) used to service requests to clients.
     ::capnp::CapabilityServerSet<Thread> m_threads;
+
+    //! Optional thread pool for servicing requests that arrive without an
+    //! explicit context.thread handle. Created on first makePool() call.
+    std::unique_ptr<ThreadPool> m_thread_pool;
 
     //! Canceler for canceling promises that we want to discard when the
     //! connection is destroyed. This is used to interrupt method calls that are
@@ -740,9 +793,9 @@ struct ThreadContext
     bool loop_thread = false;
 };
 
-//! Shared execution helper for ProxyServer<Thread>::post(). Runs
-//! fn(cancel_monitor) on the calling thread, then posts to the event loop to
-//! fulfill or reject the promise.
+//! Shared execution helper used by both ProxyServer<Thread>::post() and
+//! ThreadPool::post(). Runs fn(cancel_monitor) on the calling thread, then
+//! posts to the event loop to fulfill or reject the promise.
 //!
 //! If deferred_cleanup is provided, it is destroyed inside an evalLater() after
 //! the promise is settled. This is used by ProxyServer<Thread>::post() to
@@ -828,6 +881,25 @@ kj::Promise<T> ProxyServer<Thread>::post(Fn&& fn)
     }).attach(kj::heap<CancelProbe>(cancel_monitor));
     m_thread_ready = kj::mv(ready.promise);
     return ret;
+}
+
+template <typename T, typename Fn>
+kj::Promise<T> ThreadPool::post(Fn&& fn)
+{
+    auto result = kj::newPromiseAndFulfiller<T>();
+    auto cancel_ptr = kj::heap<CancelMonitor>();
+    EventLoop& loop = *m_connection.m_loop;
+    {
+        Lock lock(m_mutex);
+        if (m_target_count == 0) throw std::runtime_error("thread pool not available");
+        m_queue.push([&loop, fn = std::forward<Fn>(fn),
+                      fulfiller = kj::mv(result.fulfiller),
+                      cancel_ptr = kj::mv(cancel_ptr)]() mutable {
+            InvokeAndFulfill<T>(loop, fn, kj::mv(fulfiller), kj::mv(cancel_ptr));
+        });
+        m_cv.notify_one();
+    }
+    return kj::mv(result.promise);
 }
 
 //! Given stream file descriptor, make a new ProxyClient object to send requests
