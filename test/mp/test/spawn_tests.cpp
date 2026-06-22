@@ -12,23 +12,33 @@
 #include <chrono>
 #include <compare>
 #include <condition_variable>
-#include <csignal>
 #include <cstdlib>
 #include <mutex>
 #include <string>
+<<<<<<< HEAD
 #include <string_view>
 #include <system_error>
 #include <sys/wait.h>
+||||||| parent of 52e20dd (util: Add Windows support)
+#include <sys/wait.h>
+=======
+>>>>>>> 52e20dd (util: Add Windows support)
 #include <thread>
 #include <tuple>
-#include <unistd.h>
 #include <utility>
 #include <vector>
+
+#ifndef WIN32
+#include <csignal>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
 
 namespace mp {
 namespace test {
 namespace {
 
+#ifndef WIN32
 constexpr auto FAILURE_TIMEOUT = std::chrono::seconds{30};
 
 // Poll for child process exit using waitpid(..., WNOHANG) until the child exits
@@ -49,14 +59,19 @@ static bool WaitPidWithTimeout(ProcessId pid, std::chrono::milliseconds timeout,
     }
     return false;
 }
+#endif // !WIN32
 
 } // namespace
 
+#ifndef WIN32
 KJ_TEST("SpawnProcess does not run callback in child")
 {
     // This test is designed to fail deterministically if fd_to_args is invoked
     // in the post-fork child: a mutex held by another parent thread at fork
     // time appears locked forever in the child.
+    //
+    // This test is Unix-only: Windows uses CreateProcess (not fork), so the
+    // inherited-locked-mutex hazard does not apply there.
     std::mutex target_mutex;
     std::mutex control_mutex;
     std::condition_variable control_cv;
@@ -118,6 +133,7 @@ KJ_TEST("SpawnProcess does not run callback in child")
     KJ_EXPECT(exited, "Timeout waiting for child process to exit");
     KJ_EXPECT(WIFEXITED(status) && WEXITSTATUS(status) == 0);
 }
+<<<<<<< HEAD
 
 KJ_TEST("SpawnProcess throws on execvp failure")
 {
@@ -131,5 +147,9 @@ KJ_TEST("SpawnProcess throws on execvp failure")
         KJ_EXPECT(std::string_view{e.what()}.find("execvp") != std::string_view::npos);
     }
 }
+||||||| parent of 52e20dd (util: Add Windows support)
+=======
+#endif // !WIN32
+>>>>>>> 52e20dd (util: Add Windows support)
 } // namespace test
 } // namespace mp
