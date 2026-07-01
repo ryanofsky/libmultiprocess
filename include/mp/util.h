@@ -8,6 +8,7 @@
 #include <array>
 #include <capnp/schema.h>
 #include <cassert>
+#include <cstddef>
 #include <cstdlib>
 #include <cstring>
 #include <exception>
@@ -16,6 +17,7 @@
 #include <kj/memory.h>
 #include <kj/string-tree.h>
 #include <mutex>
+#include <new>
 #include <string>
 #include <tuple>
 #include <typeinfo>
@@ -246,6 +248,15 @@ void Unlock(Lock& lock, Callback&& callback)
     const UnlockGuard<Lock> unlock(lock);
     callback();
 }
+
+//! Uninitialized aligned storage for a single T value. Provides a ptr()
+//! accessor to avoid repeated reinterpret_cast/std::launder boilerplate.
+template <typename T>
+struct AlignedStorage {
+    alignas(T) std::byte data[sizeof(T)];
+    T* ptr() { return std::launder(reinterpret_cast<T*>(data)); }
+    const T* ptr() const { return std::launder(reinterpret_cast<const T*>(data)); }
+};
 
 //! Invoke a function and run a follow-up action before returning the original
 //! result.
