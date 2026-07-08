@@ -67,10 +67,32 @@ public:
     virtual int callExtended(int arg) = 0;
 };
 
+<<<<<<< HEAD
 class FooInit
 {
 };
 
+||||||| parent of f9e1c8d (proxy: fix BuildList to use non-const iteration for interface types)
+=======
+//! A second, arbitrary interface used to test returning a
+//! list of interface objects.
+class Bar
+{
+public:
+    virtual ~Bar() = default;
+    virtual int value() = 0;
+};
+
+//! Concrete Bar that returns a fixed value, used by listBars tests.
+class SimpleBar : public Bar
+{
+public:
+    explicit SimpleBar(int value) : m_value(value) {}
+    int value() override { return m_value; }
+    int m_value;
+};
+
+>>>>>>> f9e1c8d (proxy: fix BuildList to use non-const iteration for interface types)
 class FooImplementation
 {
 public:
@@ -96,6 +118,13 @@ public:
     double passDouble(double value) { return value; }
     int passFn(std::function<int()> fn) { return fn(); }
     std::vector<FooDataRef> passDataPointers(std::vector<FooDataRef> values) { return values; }
+    std::vector<std::unique_ptr<Bar>> listBars(int n)
+    {
+        std::vector<std::unique_ptr<Bar>> result;
+        result.reserve(n);
+        for (int i = 0; i < n; ++i) result.push_back(std::make_unique<SimpleBar>(i));
+        return result;
+    }
     std::shared_ptr<FooCallback> m_callback;
     void callFn() { assert(m_fn); m_fn(); }
     void callFnAsync() { assert(m_fn); m_fn(); }
