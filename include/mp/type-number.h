@@ -16,7 +16,7 @@ LocalType BuildPrimitive(InvokeContext& invoke_context,
 {
     using E = std::make_unsigned_t<std::underlying_type_t<Value>>;
     using T = std::make_unsigned_t<LocalType>;
-    static_assert(std::numeric_limits<T>::max() >= std::numeric_limits<E>::max(), "mismatched integral/enum types");
+    static_assert(std::cmp_greater_equal(std::numeric_limits<T>::max(), std::numeric_limits<E>::max()), "mismatched integral/enum types");
     return static_cast<LocalType>(value);
 }
 
@@ -27,9 +27,9 @@ LocalType BuildPrimitive(InvokeContext& invoke_context,
     typename std::enable_if<std::is_integral<Value>::value, int>::type* enable = nullptr)
 {
     static_assert(
-        std::numeric_limits<LocalType>::lowest() <= std::numeric_limits<Value>::lowest(), "mismatched integral types");
+        std::cmp_less_equal(std::numeric_limits<LocalType>::lowest(), std::numeric_limits<Value>::lowest()), "mismatched integral types");
     static_assert(
-        std::numeric_limits<LocalType>::max() >= std::numeric_limits<Value>::max(), "mismatched integral types");
+        std::cmp_greater_equal(std::numeric_limits<LocalType>::max(), std::numeric_limits<Value>::max()), "mismatched integral types");
     return value;
 }
 
