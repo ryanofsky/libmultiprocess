@@ -7,8 +7,11 @@ Library versions are tracked with simple
 Versioning policy is described in the [version.h](../include/mp/version.h)
 include.
 
-## v13
+## v14
 - Current unstable version.
+
+## [v13.0](https://github.com/bitcoin-core/libmultiprocess/commits/v13.0)
+- Adds support for nonunix platforms, making API changes that are not backwards compatible.
 
 ## [v12.0](https://github.com/bitcoin-core/libmultiprocess/commits/v12.0)
 - Adds an optional `max_connections` parameter to `ListenConnections` ([#269](https://github.com/bitcoin-core/libmultiprocess/pull/269)).
