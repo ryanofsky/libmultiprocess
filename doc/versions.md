@@ -9,10 +9,23 @@ include.
 
 ## v13
 - Current unstable version.
+<<<<<<< HEAD
 
 ## [v12.0](https://github.com/bitcoin-core/libmultiprocess/commits/v12.0)
 - Adds an optional `max_connections` parameter to `ListenConnections` ([#269](https://github.com/bitcoin-core/libmultiprocess/pull/269)).
 - Used in Bitcoin Core 32.x and newer releases with [#35684](https://github.com/bitcoin/bitcoin/pull/35684).
+||||||| parent of f2c4952 (doc: Bump version 12 > 13)
+- Adds an optional per-listener `max_connections` parameter to `ListenConnections()`
+  so servers can stop accepting new connections when a local connection cap is reached,
+  and resume accepting after existing connections disconnect.
+=======
+- Adds support for nonunix platforms, making API changes that are not backwards compatible.
+
+## [v12.0](https://github.com/bitcoin-core/libmultiprocess/commits/v12.0)
+- Adds an optional per-listener `max_connections` parameter to `ListenConnections()`
+  so servers can stop accepting new connections when a local connection cap is reached,
+  and resume accepting after existing connections disconnect.
+>>>>>>> f2c4952 (doc: Bump version 12 > 13)
 
 ## [v11.0](https://github.com/bitcoin-core/libmultiprocess/commits/v11.0)
 - Adds `makePool` method on `ThreadMap` to support thread pool routing, allowing requests without a specific client thread to be dispatched to a pool using a shortest-queue strategy ([#283](https://github.com/bitcoin-core/libmultiprocess/pull/283)).
