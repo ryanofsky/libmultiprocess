@@ -4,6 +4,8 @@
 
 #include <mp/test/foo.capnp.h>
 #include <mp/test/foo.capnp.proxy.h>
+#include <mp/proxy-types.h>
+#include <mp/type-interface.h>
 
 #include <atomic>
 #include <capnp/capability.h>
@@ -59,6 +61,45 @@ constexpr auto kMP_MAJOR_VERSION{MP_MAJOR_VERSION};
 constexpr auto kMP_MINOR_VERSION{MP_MINOR_VERSION};
 static_assert(std::is_integral_v<decltype(kMP_MAJOR_VERSION)>, "MP_MAJOR_VERSION must be an integral constant");
 static_assert(std::is_integral_v<decltype(kMP_MINOR_VERSION)>, "MP_MINOR_VERSION must be an integral constant");
+
+//! Compile-time coverage for building an interface field from a unique_ptr.
+//!
+//! Building an interface field takes ownership of the pointed-to object by
+//! calling unique_ptr::release() (see the CustomBuildField overload in
+//! type-interface.h). These checks pin down which value categories that overload
+//! accepts, so a change to the rules is visible in the test diff.
+namespace {
+//! Minimal output type satisfying the InterfaceField concept so that the
+//! interface CustomBuildField overload is the one selected below. Only get() is
+//! needed for overload resolution; the overload body (which would call set()) is
+//! never instantiated by the CanBuildInterfaceUnique check.
+struct FakeInterfaceOutput
+{
+    struct Field { using Calls = void; };
+    Field get() const;
+};
+static_assert(InterfaceField<FakeInterfaceOutput>);
+
+//! True if an interface field can be built from a unique_ptr passed with the
+//! value category of Value (an lvalue or rvalue reference type). This only
+//! checks overload resolution, so it reports false when the interface overload
+//! is constrained away or deleted for that value category.
+template <typename Value>
+concept CanBuildInterfaceUnique = requires {
+    mp::CustomBuildField(TypeList<std::unique_ptr<FooImplementation>>(), Priority<3>(),
+        std::declval<InvokeContext&>(), std::declval<Value>(), std::declval<FakeInterfaceOutput&>());
+};
+} // namespace
+
+// An rvalue unique_ptr can be built as an interface field: ownership is
+// transferred to the proxy server, which is the intended use (e.g. returning a
+// vector<unique_ptr<Interface>> by value).
+static_assert(CanBuildInterfaceUnique<std::unique_ptr<FooImplementation>&&>);
+
+// An lvalue unique_ptr is currently also accepted, even though building the
+// field steals ownership and leaves the caller's variable null. This is
+// tightened to a compile error in the following commit.
+static_assert(CanBuildInterfaceUnique<std::unique_ptr<FooImplementation>&>);
 
 /**
  * Test setup class creating a two way connection between a
