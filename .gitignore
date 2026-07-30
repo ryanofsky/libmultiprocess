@@ -1,5 +1,11 @@
 # CMake artifacts
 /*build*
 
+# Symlink created by MP_EXTRAS at configure time
+/compile_commands.json
+
+# Per-user cmake preset overrides (committed presets live in CMakePresets.json)
+CMakeUserPresets.json
+
 # Git artifacts
 *.patch

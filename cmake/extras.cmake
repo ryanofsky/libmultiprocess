@@ -17,6 +17,23 @@
 #   - Anything required to build or install the library correctly
 #   - Anything callers cannot cleanly replicate without access to internals
 
+# Export a compile database for clangd and other tooling, and symlink it into
+# the source directory so editors find it without needing a .clangd config
+# pointing at the build directory. The symlink is created at configure time
+# so it is ready before any source is compiled.
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  execute_process(
+    COMMAND ${CMAKE_COMMAND} -E create_symlink
+      "${CMAKE_BINARY_DIR}/compile_commands.json"
+      "${CMAKE_SOURCE_DIR}/compile_commands.json"
+    RESULT_VARIABLE _symlink_result
+  )
+  if(NOT _symlink_result EQUAL 0)
+    message(STATUS "MP_EXTRAS: could not create compile_commands.json symlink in source directory.")
+  endif()
+endif()
+
 option(MP_ENABLE_CLANG_TIDY "Run clang-tidy with the compiler." OFF)
 if(MP_ENABLE_CLANG_TIDY)
   find_program(CLANG_TIDY_EXECUTABLE NAMES clang-tidy)

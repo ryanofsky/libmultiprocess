@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "configurePresets": [
+    {
+      "name": "dev",
+      "displayName": "Developer",
+      "description": "Enable extras for local development: compile database with source-dir symlink, clang-tidy, IWYU.",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "MP_EXTRAS": "ON"
+      }
+    }
+  ]
+}
