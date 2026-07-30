@@ -50,3 +50,28 @@ It is also possible to import CMake targets separately with:
 find_package(Libmultiprocess COMPONENTS Bin)
 find_package(Libmultiprocess COMPONENTS Lib)
 ```
+
+## Developer setup
+
+A `dev` CMake preset is provided for local development. It sets the build
+directory to `build/` and enables `MP_EXTRAS`, which exports a compile
+database and creates a `compile_commands.json` symlink in the source root so
+editors and language servers (clangd, etc.) work without additional
+configuration:
+
+```sh
+cmake --preset dev
+make -C build
+```
+
+The preset also unlocks optional static analysis tools:
+
+```sh
+# Run clang-tidy on every compiled file
+cmake --preset dev -DMP_ENABLE_CLANG_TIDY=ON
+
+# Run include-what-you-use on every compiled file
+cmake --preset dev -DMP_ENABLE_IWYU=ON
+```
+
+To enable `MP_EXTRAS` without the preset, pass `-DMP_EXTRAS=ON` to cmake.
