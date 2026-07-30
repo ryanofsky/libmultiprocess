@@ -20,8 +20,20 @@ kj::Own<typename Interface::Server> CustomMakeProxyServer(InvokeContext& context
     return MakeProxyServer<Interface, Impl>(context, std::move(impl));
 }
 
+//! Build an interface field from a unique_ptr, handing ownership of the
+//! pointed-to object to the proxy server by calling release().
+//!
+//! Only an rvalue is accepted. Building the field empties the unique_ptr, so
+//! requiring an rvalue (a temporary or an explicit std::move) keeps the transfer
+//! of ownership visible at the call site and prevents accidentally emptying an
+//! lvalue the caller still owns (for example an element of a container that is
+//! being serialized but not given up). The value category is expressed as a
+//! constraint rather than a concrete parameter type so the parameter keeps the
+//! Value&& form used by the other CustomBuildField overloads. The deleted
+//! overload below matches the lvalue case so it fails with a clear "deleted
+//! function" error instead of falling through to the generic CustomBuildField.
 template <typename Impl, typename Value, typename Output>
-    requires InterfaceField<Output>
+    requires (InterfaceField<Output> && !std::is_lvalue_reference_v<Value>)
 void CustomBuildField(TypeList<std::unique_ptr<Impl>>,
     Priority<1>,
     InvokeContext& invoke_context,
@@ -33,6 +45,14 @@ void CustomBuildField(TypeList<std::unique_ptr<Impl>>,
         output.set(CustomMakeProxyServer<Interface, Impl>(invoke_context, std::shared_ptr<Impl>(value.release())));
     }
 }
+
+template <typename Impl, typename Value, typename Output>
+    requires (InterfaceField<Output> && std::is_lvalue_reference_v<Value>)
+void CustomBuildField(TypeList<std::unique_ptr<Impl>>,
+    Priority<1>,
+    InvokeContext& invoke_context,
+    Value&& value,
+    Output&& output) = delete;
 
 template <typename Impl, typename Value, typename Output>
     requires InterfaceField<Output>

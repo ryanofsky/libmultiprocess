@@ -96,10 +96,10 @@ concept CanBuildInterfaceUnique = requires {
 // vector<unique_ptr<Interface>> by value).
 static_assert(CanBuildInterfaceUnique<std::unique_ptr<FooImplementation>&&>);
 
-// An lvalue unique_ptr is currently also accepted, even though building the
-// field steals ownership and leaves the caller's variable null. This is
-// tightened to a compile error in the following commit.
-static_assert(CanBuildInterfaceUnique<std::unique_ptr<FooImplementation>&>);
+// An lvalue unique_ptr is rejected: building the field would steal ownership and
+// leave the caller's variable null, so ownership must be given up explicitly with
+// a temporary or std::move.
+static_assert(!CanBuildInterfaceUnique<std::unique_ptr<FooImplementation>&>);
 
 /**
  * Test setup class creating a two way connection between a
