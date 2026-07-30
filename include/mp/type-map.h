@@ -19,7 +19,7 @@ void CustomBuildField(TypeList<std::map<KeyLocalType, ValueLocalType>>,
     Value&& value,
     Output&& output)
 {
-    BuildList(TypeList<std::pair<KeyLocalType, ValueLocalType>>(), invoke_context, output, value);
+    BuildList(TypeList<std::pair<KeyLocalType, ValueLocalType>>(), invoke_context, output, std::forward<Value>(value));
 }
 
 // Replacement for `m.emplace(piecewise_construct, t1, t2)` to work around a

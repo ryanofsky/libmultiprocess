@@ -16,7 +16,7 @@ void CustomBuildField(TypeList<std::set<LocalType>>,
     Value&& value,
     Output&& output)
 {
-    BuildList(TypeList<LocalType>(), invoke_context, output, value);
+    BuildList(TypeList<LocalType>(), invoke_context, output, std::forward<Value>(value));
 }
 
 template <typename LocalType, typename Input, typename ReadDest>
