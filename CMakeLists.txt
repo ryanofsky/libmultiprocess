@@ -83,34 +83,9 @@ endif()
 
 set(MPGEN_EXECUTABLE "" CACHE FILEPATH "If specified, should be full path to an external mpgen binary to use rather than the one built internally.")
 
-option(MP_ENABLE_CLANG_TIDY "Run clang-tidy with the compiler." OFF)
-if(MP_ENABLE_CLANG_TIDY)
-  find_program(CLANG_TIDY_EXECUTABLE NAMES clang-tidy)
-  if(NOT CLANG_TIDY_EXECUTABLE)
-    message(FATAL_ERROR "MP_ENABLE_CLANG_TIDY is ON but clang-tidy is not found.")
-  endif()
-  set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXECUTABLE}")
-endif()
-
-option(MP_ENABLE_IWYU "Run include-what-you-use with the compiler." OFF)
-if(MP_ENABLE_IWYU)
-  find_program(IWYU_EXECUTABLE NAMES include-what-you-use iwyu)
-  if(NOT IWYU_EXECUTABLE)
-    message(FATAL_ERROR "MP_ENABLE_IWYU is ON but include-what-you-use was not found.")
-  endif()
-  set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE "${IWYU_EXECUTABLE};-Xiwyu;--error")
-  if(DEFINED ENV{IWYU_MAPPING_FILE})
-    list(APPEND CMAKE_CXX_INCLUDE_WHAT_YOU_USE "-Xiwyu" "--mapping_file=$ENV{IWYU_MAPPING_FILE}")
-  endif()
-endif()
-
-if(MP_ENABLE_CLANG_TIDY OR MP_ENABLE_IWYU)
-  # Workaround for nix from https://gitlab.kitware.com/cmake/cmake/-/issues/20912#note_793338
-  # Nix injects header paths via $NIX_CFLAGS_COMPILE; CMake tags these as
-  # CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES and omits them from the compile
-  # database, so clang-tidy, which ignores $NIX_CFLAGS_COMPILE, can't find capnp
-  # headers. Setting them as standard passes them to clang-tidy.
-  set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
+option(MP_EXTRAS "Enable extra build features useful for local development (compile database, clang-tidy, IWYU)." OFF)
+if(MP_EXTRAS)
+  include("cmake/extras.cmake")
 endif()
 
 include("cmake/compat_config.cmake")
