@@ -13,6 +13,7 @@
 #include <atomic>
 #include <capnp/capability.h>
 #include <capnp/common.h> // IWYU pragma: keep
+#include <capnp/rpc-twoparty.h>
 #include <capnp/rpc.h>
 #include <condition_variable>
 #include <functional>
@@ -113,6 +114,28 @@ Connection::~Connection() noexcept(false)
     // event loop thread, and if there was a remote disconnect, this is called
     // by an onDisconnect callback directly from the event loop thread.
     assert(std::this_thread::get_id() == m_loop->m_thread_id);
+    disconnect();
+}
+
+void Connection::disconnect()
+{
+    // Disconnecting triggers I/O and tears down capnp state, so it must run on
+    // the event loop thread, like the destructor.
+    assert(std::this_thread::get_id() == m_loop->m_thread_id);
+    // m_network is reset at the end of teardown below, so treat it being null
+    // as the "already disconnected" state: a second call (including the one
+    // from the destructor) is a no-op.
+    if (!m_network) return;
+
+    // Expire m_alive before severing the connection below. Severing it
+    // completes m_network->onDisconnect(), scheduling the onRemoteDisconnect
+    // handlers (see _Serve and ConnectStream) that delete this Connection
+    // object. Expiring m_alive first makes those handlers skip the deletion,
+    // which is redundant when disconnect() is called from the destructor and
+    // harmful when disconnect() is called separately by code that keeps using
+    // the object afterwards (e.g. code waiting for in-flight calls to finish
+    // before destroying it).
+    m_alive.reset();
 
     // Try to cancel any calls that may be executing.
     m_canceler.cancel("Interrupted by disconnect");
@@ -200,12 +223,32 @@ Connection::~Connection() noexcept(false)
     // on clean and unclean shutdowns. In unclean shutdown case when the
     // connection is broken, sync and async cleanup lists will be filled with
     // callbacks. In the clean shutdown case both lists will be empty.
-    Lock lock{m_loop->m_mutex};
-    while (!m_sync_cleanup_fns.empty()) {
-        CleanupList fn;
-        fn.splice(fn.begin(), m_sync_cleanup_fns, m_sync_cleanup_fns.begin());
-        Unlock(lock, fn.front());
+    {
+        Lock lock{m_loop->m_mutex};
+        while (!m_sync_cleanup_fns.empty()) {
+            CleanupList fn;
+            fn.splice(fn.begin(), m_sync_cleanup_fns, m_sync_cleanup_fns.begin());
+            Unlock(lock, fn.front());
+        }
     }
+
+    // Release Thread capabilities so idle worker threads are stopped and
+    // joined at disconnect time, whether or not this object is destroyed right
+    // away. (A worker thread currently executing a call body is unaffected:
+    // its ProxyServer<Thread> object is pinned by the post() call and released
+    // when the body finishes.)
+    m_thread_pool.clear();
+    m_thread_map = nullptr;
+
+    // Destroy the network and close the stream so the peer observes the
+    // disconnect, reading EOF and failing its outstanding calls with
+    // DISCONNECTED errors. This has to be explicit because when disconnect()
+    // is called without destroying this object, nothing else severs the
+    // transport: m_rpc_system.reset() above stops reading from the stream but
+    // does not reliably close it. The network is destroyed first since it
+    // references the stream.
+    m_network.reset();
+    m_stream = nullptr;
 }
 
 CleanupIt Connection::onDisconnect(std::function<void()> fn)
