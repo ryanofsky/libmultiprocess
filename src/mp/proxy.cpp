@@ -313,6 +313,28 @@ void Connection::disconnect()
     m_stream = nullptr;
 }
 
+<<<<<<< HEAD
+||||||| parent of b13aae1 (proxy-io: make server object tracker a plain Connection member)
+void Connection::waitDrained()
+{
+    // Blocking the event loop thread here would deadlock: in-flight call
+    // bodies sync() back to the event loop to deliver their results, and
+    // server objects are destroyed on the event loop thread.
+    assert(std::this_thread::get_id() != m_loop->m_thread_id);
+    m_server_objects->wait();
+}
+
+=======
+void Connection::waitDrained()
+{
+    // Blocking the event loop thread here would deadlock: in-flight call
+    // bodies sync() back to the event loop to deliver their results, and
+    // server objects are destroyed on the event loop thread.
+    assert(std::this_thread::get_id() != m_loop->m_thread_id);
+    m_server_objects.wait();
+}
+
+>>>>>>> b13aae1 (proxy-io: make server object tracker a plain Connection member)
 CleanupIt Connection::addSyncCleanup(std::function<void()> fn)
 {
     const Lock lock(m_loop->m_mutex);
