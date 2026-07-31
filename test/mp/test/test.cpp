@@ -644,6 +644,7 @@ KJ_TEST("Waiting for in-flight server call to finish after disconnect")
         release_body.get_future().get();
     };
 
+<<<<<<< HEAD
     // Grab the server Connection object on the event loop thread before
     // disconnecting. It is only used before disconnect() below, after which it
     // may be freed.
@@ -656,6 +657,23 @@ KJ_TEST("Waiting for in-flight server call to finish after disconnect")
 =======
     foo->m_context.loop->sync([&] { connection = setup.server->m_context.connection.get(); });
 >>>>>>> ef84b20 (proxy-io: manage Connection lifetime with shared_ptr)
+||||||| parent of 7eb79e5 (proxy-io: keep client capability handles across disconnect)
+    // Grab the server Connection object on the event loop thread before
+    // disconnecting. It stays valid until server_disconnect() destroys it
+    // below.
+    Connection* connection{nullptr};
+    foo->m_context.loop->sync([&] { connection = setup.server->m_context.connection.get(); });
+=======
+    // Grab a shared reference to the server Connection on the event loop thread
+    // before disconnecting, and hold it for the rest of the test. This mirrors
+    // Ipc::disconnectIncoming, which keeps its own reference alive across the
+    // disconnect() + waitDrained() sequence: under shared ownership the last
+    // server proxy (destroyed once the drained body finishes) would otherwise
+    // free the Connection while the test is still observing it. The reference is
+    // released on the event loop thread at the end so ~Connection runs there.
+    std::shared_ptr<Connection> connection;
+    foo->m_context.loop->sync([&] { connection = setup.server->m_context.connection; });
+>>>>>>> 7eb79e5 (proxy-io: keep client capability handles across disconnect)
 
     // Invoke the async method on a separate thread so its body blocks there
     // while this thread makes assertions. callFnAsync() takes an mp.Context,
@@ -697,12 +715,26 @@ KJ_TEST("Waiting for in-flight server call to finish after disconnect")
     KJ_EXPECT(tracker->pendingServerObjects() == 0);
     call_thread.join();
 
+<<<<<<< HEAD
     // disconnect() left the connection's onDisconnect handler to remove it from
     // the incoming connection list, which destroys it (~Connection notices
     // disconnect() has already run and does not tear things down twice). The
     // handler runs on an event loop turn after disconnect() returns, so by now
     // it has run.
     loop.sync([&] { KJ_EXPECT(loop.m_incoming_connections.empty()); });
+||||||| parent of 7eb79e5 (proxy-io: keep client capability handles across disconnect)
+    // Destroy the drained connection. (~Connection notices disconnect() has
+    // already run and does not tear things down twice.)
+    setup.server_disconnect();
+=======
+    // Drop the test's reference on the event loop thread, mirroring how
+    // Ipc::disconnectIncoming releases the last reference after draining. This
+    // destroys the drained connection (~Connection notices disconnect() has
+    // already run and does not tear things down twice). server_disconnect() is
+    // then a no-op that just lets the loop exit.
+    foo->m_context.loop->sync([&] { connection.reset(); });
+    setup.server_disconnect();
+>>>>>>> 7eb79e5 (proxy-io: keep client capability handles across disconnect)
 }
 
 KJ_TEST("Destroying ProxyClient<> with destroy method after peer disconnect")
