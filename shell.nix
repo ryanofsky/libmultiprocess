@@ -56,6 +56,25 @@ let
   })).override (lib.optionalAttrs enableLibcxx { clangStdenv = llvm.libcxxStdenv; });
   clang = if enableLibcxx then llvm.libcxxClang else llvm.clang;
   clang-tools = llvm.clang-tools.override { inherit enableLibcxx; };
+  # IWYU parses source files itself with an embedded clang frontend, finding
+  # standard library headers through CPATH/CPLUS_INCLUDE_PATH variables set by
+  # its nixpkgs wrapper script:
+  # https://github.com/NixOS/nixpkgs/blob/master/pkgs/development/tools/analysis/include-what-you-use/wrapper
+  # The wrapper bakes in the include paths of `llvmPackages.clang`, which on
+  # Linux is the libstdc++-flavored clang wrapper, so by default IWYU analyzes
+  # code against libstdc++ even when enableLibcxx is set — making the libc++
+  # analysis silently identical to the libstdc++ one and leaving the
+  # IWYU_MAPPING_FILE below unused (its keys are libc++-internal header paths
+  # that never appear in a libstdc++ parse). Overriding `clang` to the
+  # libcxxClang flavor makes the wrapper bake in libc++ include paths instead.
+  # The libc++ used is the one from IWYU's own llvmPackages (kept matched to
+  # the IWYU release by nixpkgs), not the pinned llvmBase toolchain above; the
+  # two can differ by a major version, which is fine for include analysis and
+  # avoids rebuilding IWYU against an LLVM its source may not support.
+  include-what-you-use = pkgs.include-what-you-use.override (old:
+    lib.optionalAttrs enableLibcxx {
+      llvmPackages = old.llvmPackages // { clang = old.llvmPackages.libcxxClang; };
+    });
   cmakeHashes = {
     "3.12.4" = "sha256-UlVYS/0EPrcXViz/iULUcvHA5GecSUHYS6raqbKOMZQ=";
   };
@@ -80,6 +99,9 @@ in crossPkgs.mkShell {
     clang-tools
   ];
 
-  # Tell IWYU where its libc++ mapping lives
-  IWYU_MAPPING_FILE = if enableLibcxx then "${llvm.libcxx.dev}/include/c++/v1/libcxx.imp" else null;
+  # Tell IWYU where its libc++ mapping file lives. This must be the mapping
+  # file shipped with the same libc++ whose headers IWYU parses (see the
+  # include-what-you-use override above), which is IWYU's own libc++, not
+  # `llvm.libcxx` from the pinned toolchain.
+  IWYU_MAPPING_FILE = if enableLibcxx then "${include-what-you-use.clang.libcxx.dev}/include/c++/v1/libcxx.imp" else null;
 }
