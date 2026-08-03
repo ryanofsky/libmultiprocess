@@ -88,11 +88,11 @@ in crossPkgs.mkShell {
   ];
   nativeBuildInputs = with pkgs; [
     cmakeBuild
-    include-what-you-use
     ninja
   ] ++ lib.optional (gcc != null) gcc ++ lib.optionals (!minimal) [
     clang
     clang-tools
+    include-what-you-use
   ];
 
 <<<<<<< HEAD
