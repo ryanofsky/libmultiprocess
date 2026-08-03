@@ -90,12 +90,18 @@ in crossPkgs.mkShell {
   ];
   nativeBuildInputs = with pkgs; [
     cmakeBuild
+<<<<<<< HEAD
     git
     include-what-you-use
+||||||| parent of 3036363 (ci: Provide IWYU only in non-minimal shells)
+    include-what-you-use
+=======
+>>>>>>> 3036363 (ci: Provide IWYU only in non-minimal shells)
     ninja
   ] ++ lib.optional (gcc != null) gcc ++ lib.optionals (!minimal) [
     clang
     clang-tools
+    include-what-you-use
   ];
 
   CC = if gcc == null then null else "${gcc}/bin/gcc";
