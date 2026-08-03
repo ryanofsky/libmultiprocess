@@ -104,10 +104,21 @@ endif()
 
 if(MP_ENABLE_CLANG_TIDY OR MP_ENABLE_IWYU)
   # Workaround for nix from https://gitlab.kitware.com/cmake/cmake/-/issues/20912#note_793338
-  # Nix injects header paths via $NIX_CFLAGS_COMPILE; CMake tags these as
-  # CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES and omits them from the compile
-  # database, so clang-tidy, which ignores $NIX_CFLAGS_COMPILE, can't find capnp
-  # headers. Setting them as standard passes them to clang-tidy.
+  # Nix compiler wrappers inject header search paths internally, so the paths
+  # never appear on compile command lines. CMake detects them at configure
+  # time as CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES and omits them from the
+  # compile database, so tools that re-parse sources without going through the
+  # compiler wrapper cannot find them. Setting them as standard directories
+  # puts them on every compile command as explicit -isystem flags.
+  #
+  # This is a temporary workaround that should be removed when no longer
+  # needed:
+  # - clang-tidy no longer needs it since the nixpkgs clang-tools wrapper was
+  #   fixed in https://github.com/NixOS/nixpkgs/pull/462747.
+  # - IWYU still needs it because the nixpkgs include-what-you-use wrapper
+  #   script drops the -cxx-isystem flags newer nixpkgs compiler wrappers use
+  #   for C++ standard library paths (see
+  #   https://github.com/bitcoin-core/libmultiprocess/pull/238#discussion_r3342093865).
   set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
 endif()
 
