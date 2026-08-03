@@ -106,10 +106,30 @@ endif()
 
 if(MP_ENABLE_CLANG_TIDY OR MP_ENABLE_IWYU)
   # Workaround for nix from https://gitlab.kitware.com/cmake/cmake/-/issues/20912#note_793338
-  # Nix injects header paths via $NIX_CFLAGS_COMPILE; CMake tags these as
-  # CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES and omits them from the compile
-  # database, so clang-tidy, which ignores $NIX_CFLAGS_COMPILE, can't find capnp
-  # headers. Setting them as standard passes them to clang-tidy.
+  # Nix compiler wrappers inject standard library and dependency header paths
+  # internally (via $NIX_CFLAGS_COMPILE and wrapper flag files), so those paths
+  # never appear on compile command lines. CMake detects them at configure time
+  # as CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES and omits them from the compile
+  # database, so tools that re-parse sources without going through the compiler
+  # wrapper cannot find them. Setting them as standard directories puts them on
+  # every compile command as explicit -isystem flags.
+  #
+  # This is a temporary workaround that should be removed once the underlying
+  # nixpkgs issues are fixed; ideally the environment (shell.nix), not the
+  # build system, is responsible for making tools resolve the right headers:
+  #
+  # - For clang-tidy it is already unnecessary: since
+  #   https://github.com/NixOS/nixpkgs/pull/462747 the nixpkgs clang-tools
+  #   wrapper resolves the paths itself.
+  # - For IWYU it is still needed because the nixpkgs include-what-you-use
+  #   wrapper script populates CPATH/CPLUS_INCLUDE_PATH from its compiler's
+  #   flag files but does not parse the -cxx-isystem flags newer nixpkgs
+  #   wrappers emit for C++ stdlib paths (see
+  #   https://github.com/bitcoin-core/libmultiprocess/pull/238#discussion_r3342093865),
+  #   dropping those paths from IWYU's environment; the explicit -isystem
+  #   flags generated here fill that gap. Once that bug is fixed in nixpkgs,
+  #   the include-what-you-use override in shell.nix supplies the right
+  #   paths on its own and this setting can be removed.
   set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
 endif()
 

@@ -56,6 +56,19 @@ let
   })).override (lib.optionalAttrs enableLibcxx { clangStdenv = llvm.libcxxStdenv; });
   clang = if enableLibcxx then llvm.libcxxClang else llvm.clang;
   clang-tools = llvm.clang-tools.override { inherit enableLibcxx; };
+  # IWYU parses source files with an embedded clang frontend, locating standard
+  # library headers through CPATH/CPLUS_INCLUDE_PATH variables set by its
+  # nixpkgs wrapper script:
+  # https://github.com/NixOS/nixpkgs/blob/master/pkgs/development/tools/analysis/include-what-you-use/wrapper
+  # The wrapper derives those variables from the include paths of the clang
+  # wrapper recorded in the derivation's `clang` attribute, which defaults to
+  # the nixpkgs toolchain IWYU was built against (libstdc++-flavored on Linux),
+  # not the toolchain this shell uses. Rebind it to this shell's compiler so
+  # IWYU sees the same standard library the build uses: the pinned libc++ when
+  # enableLibcxx is set, the build gcc's libstdc++ otherwise.
+  include-what-you-use = pkgs.include-what-you-use.overrideAttrs (old: {
+    inherit clang;
+  });
   cmakeHashes = {
     "3.12.4" = "sha256-UlVYS/0EPrcXViz/iULUcvHA5GecSUHYS6raqbKOMZQ=";
   };
@@ -80,6 +93,15 @@ in crossPkgs.mkShell {
     clang-tools
   ];
 
-  # Tell IWYU where its libc++ mapping lives
+  # Tell IWYU where its libc++ mapping file lives. libcxx.imp maps
+  # libc++-internal detail headers (e.g. <__vector/vector.h>) to the public
+  # headers IWYU should suggest instead. IWYU only applies mapping tables
+  # compiled into its binary unless a mapping file is passed explicitly — it
+  # does not discover the libcxx.imp shipped alongside the libc++ headers it
+  # parses — so CMakeLists.txt forwards this variable via
+  # -Xiwyu --mapping_file when MP_ENABLE_IWYU is set. Taking the file from
+  # llvm.libcxx keeps it consistent with the headers IWYU parses, since the
+  # include-what-you-use override above bakes the same toolchain's include
+  # paths into IWYU's wrapper environment.
   IWYU_MAPPING_FILE = if enableLibcxx then "${llvm.libcxx.dev}/include/c++/v1/libcxx.imp" else null;
 }
