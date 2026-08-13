@@ -928,6 +928,19 @@ struct ThreadContext
     //! to assert false if there's an attempt to execute a blocking operation
     //! which could deadlock the thread.
     bool loop_thread = false;
+
+    //! Destructor which destroys the request_threads and callback_threads map
+    //! entries one at a time, removing each entry from its map while holding
+    //! Waiter::m_mutex, but destroying the removed ProxyClient<Thread> object
+    //! after releasing the mutex. Removing entries under the mutex is
+    //! necessary because event loop threads can concurrently remove map
+    //! entries when connections are broken (see SetThread cleanup function),
+    //! so the maps cannot be destroyed without locking as an implicit
+    //! destructor would do. Destroying ProxyClient<Thread> objects after
+    //! releasing the mutex is necessary to respect lock order and avoid
+    //! locking Waiter::m_mutex before EventLoop::m_mutex (see
+    //! "Synchronization note" above).
+    ~ThreadContext();
 };
 
 template<typename T, typename Fn>
