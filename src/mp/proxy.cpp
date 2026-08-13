@@ -13,10 +13,12 @@
 #include <atomic>
 #include <capnp/capability.h>
 #include <capnp/common.h> // IWYU pragma: keep
+#include <capnp/rpc-twoparty.h>
 #include <capnp/rpc.h>
 #include <condition_variable>
 #include <functional>
 #include <future>
+#include <initializer_list>
 #include <kj/async.h>
 #include <kj/async-io.h>
 #include <kj/async-prelude.h>
@@ -113,6 +115,25 @@ Connection::~Connection() noexcept(false)
     // event loop thread, and if there was a remote disconnect, this is called
     // by an onDisconnect callback directly from the event loop thread.
     assert(std::this_thread::get_id() == m_loop->m_thread_id);
+    disconnect();
+}
+
+void Connection::disconnect()
+{
+    // Disconnecting triggers I/O and tears down capnp state, so it must run on
+    // the event loop thread, like the destructor.
+    assert(std::this_thread::get_id() == m_loop->m_thread_id);
+    if (m_disconnected) return;
+    m_disconnected = true;
+
+    // Cancel pending onDisconnect handlers first. Severing the connection
+    // below completes m_network.onDisconnect() promises, and the registered
+    // handlers (see _Serve and ConnectStream) destroy this Connection object.
+    // That is redundant when disconnect() is called from the destructor, and
+    // harmful when disconnect() is called separately by code that keeps using
+    // the object afterwards (e.g. code waiting for in-flight calls to finish
+    // before destroying it).
+    m_on_disconnect.reset();
 
     // Try to cancel any calls that may be executing.
     m_canceler.cancel("Interrupted by disconnect");
@@ -200,12 +221,47 @@ Connection::~Connection() noexcept(false)
     // on clean and unclean shutdowns. In unclean shutdown case when the
     // connection is broken, sync and async cleanup lists will be filled with
     // callbacks. In the clean shutdown case both lists will be empty.
-    Lock lock{m_loop->m_mutex};
-    while (!m_sync_cleanup_fns.empty()) {
-        CleanupList fn;
-        fn.splice(fn.begin(), m_sync_cleanup_fns, m_sync_cleanup_fns.begin());
-        Unlock(lock, fn.front());
+    {
+        Lock lock{m_loop->m_mutex};
+        while (!m_sync_cleanup_fns.empty()) {
+            CleanupList fn;
+            fn.splice(fn.begin(), m_sync_cleanup_fns, m_sync_cleanup_fns.begin());
+            Unlock(lock, fn.front());
+        }
     }
+
+    // Release Thread capabilities owned by this connection, so idle worker
+    // threads are stopped and joined now instead of when this object is
+    // destroyed. (A worker thread currently executing a call body is
+    // unaffected: its ProxyServer<Thread> object is pinned by the post() call
+    // and released when the body finishes.) Previously this happened
+    // implicitly when the m_thread_pool and m_thread_map members were
+    // destroyed; it is done explicitly here so disconnect() has the same
+    // effect whether or not the object is destroyed right away.
+    m_thread_pool.clear();
+    m_thread_map = nullptr;
+
+    // Destroy the network and close the stream. Closing the stream is what
+    // makes the peer observe the disconnect: it reads EOF and fails its
+    // outstanding calls with DISCONNECTED errors. Previously this happened
+    // implicitly when the m_network and m_stream members were destroyed; it
+    // must be done explicitly here because when disconnect() is called
+    // without destroying this object, nothing else severs the transport (the
+    // m_rpc_system.reset() call above stops reading from the stream but does
+    // not reliably close it), and the peer would not learn about the
+    // disconnect. The network is destroyed first since it references the
+    // stream.
+    m_network.reset();
+    m_stream = nullptr;
+}
+
+void Connection::waitDrained()
+{
+    // Blocking the event loop thread here would deadlock: in-flight call
+    // bodies sync() back to the event loop to deliver their results, and
+    // server objects are destroyed on the event loop thread.
+    assert(std::this_thread::get_id() != m_loop->m_thread_id);
+    m_server_objects->wait();
 }
 
 CleanupIt Connection::addSyncCleanup(std::function<void()> fn)
@@ -394,20 +450,28 @@ std::tuple<ConnThread, bool> SetThread(GuardedRef<ConnThreads> threads, Connecti
     }
     if (inserted) {
         thread->second.emplace(make_thread(), connection, /* destroy_connection= */ false);
-        thread->second->m_disconnect_cb = connection->addSyncCleanup([threads, thread] {
-            // Note: it is safe to use the `thread` iterator in this cleanup
-            // function, because the iterator would only be invalid if the map entry
-            // was removed, and if the map entry is removed the ProxyClient<Thread>
-            // destructor unregisters the cleanup.
+        thread->second->m_disconnect_cb = connection->addSyncCleanup([threads, connection] {
+            // Remove the map entry about to be destroyed. Look the entry up by
+            // key under Waiter::m_mutex instead of capturing the map iterator,
+            // because the entry may have already been extracted by
+            // ~ThreadContext if the thread owning the map is exiting
+            // concurrently. In that case the owning thread destroys the
+            // ProxyClient<Thread> and nothing needs to happen here.
+            ConnThreads::node_type removed;
+            {
+                const Lock lock(threads.mutex);
+                auto it = threads.ref.find(connection);
+                if (it == threads.ref.end()) return;
 
-            // Connection is being destroyed before thread client is, so reset
-            // thread client m_disconnect_cb member so thread client destructor does not
-            // try to unregister this callback after connection is destroyed.
-            thread->second->m_disconnect_cb.reset();
-
-            // Remove connection pointer about to be destroyed from the map
-            const Lock lock(threads.mutex);
-            threads.ref.erase(thread);
+                // Connection is being destroyed before thread client is, so reset
+                // thread client m_disconnect_cb member so thread client destructor does not
+                // try to unregister this callback after connection is destroyed.
+                it->second->m_disconnect_cb.reset();
+                removed = threads.ref.extract(it);
+            }
+            // The removed node is destroyed here, after Waiter::m_mutex is
+            // released, so the ProxyClient<Thread> destructor can lock
+            // EventLoop::m_mutex without violating lock order.
         });
     }
     return {thread, inserted};
@@ -424,10 +488,54 @@ ProxyClient<Thread>::~ProxyClient()
         // between this thread trying to remove the callback and the disconnect
         // handler attempting to call it.
         m_context.loop->sync([&]() {
-            if (m_disconnect_cb) {
+            // Check m_context.connection in addition to m_disconnect_cb: if
+            // the connection was disconnected while this thread was waiting
+            // for the event loop, Connection::disconnect() has already spliced
+            // the m_disconnect_cb callback out of the cleanup list and run it
+            // (along with the ProxyClientBase disconnect callback, which sets
+            // m_context.connection to null), so the m_disconnect_cb iterator
+            // is no longer valid and must not be passed to removeSyncCleanup.
+            // Note m_disconnect_cb can be set here even though the callback
+            // ran, because the callback only resets m_disconnect_cb when it
+            // still finds this object in the thread map (see SetThread); if
+            // ~ThreadContext extracted the map entry first, the callback
+            // cannot reach this object.
+            if (m_disconnect_cb && m_context.connection) {
                 m_context.connection->removeSyncCleanup(*m_disconnect_cb);
             }
         });
+    }
+}
+
+ThreadContext::~ThreadContext()
+{
+    // Destroy the thread client maps entry by entry: remove each entry from
+    // its map while holding Waiter::m_mutex, since event loop threads
+    // concurrently remove entries when connections are broken (see SetThread
+    // cleanup function), then destroy the removed ProxyClient<Thread> with the
+    // mutex released, since its destructor needs to lock EventLoop::m_mutex
+    // and Waiter::m_mutex must not be held when EventLoop::m_mutex is
+    // acquired. If a SetThread cleanup function runs concurrently, whichever
+    // side removes an entry from the map first becomes responsible for
+    // destroying its ProxyClient<Thread>, so each thread client is destroyed
+    // exactly once.
+    //
+    // The waiter null check is needed for server threads created by
+    // ProxyServer<ThreadMap>::makeThread, whose waiter pointer is moved away
+    // and maps are cleared by ~ProxyServer<Thread> before the thread exits.
+    if (waiter) {
+        for (ConnThreads* threads : {&request_threads, &callback_threads}) {
+            while (true) {
+                ConnThreads::node_type removed;
+                {
+                    const Lock lock(waiter->m_mutex);
+                    if (threads->empty()) break;
+                    removed = threads->extract(threads->begin());
+                }
+                // The removed node is destroyed here, after Waiter::m_mutex is
+                // released, invoking ~ProxyClient<Thread>.
+            }
+        }
     }
 }
 
