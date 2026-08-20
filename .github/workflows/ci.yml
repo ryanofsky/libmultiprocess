@@ -138,10 +138,10 @@ jobs:
 
     env:
       CI_NIXPKGS_CHANNEL: nixos-26.05
-      NIX_EXTRA_CONFIG: |
+      CI_NIX_CONFIG: |
         keep-env-derivations = true
         keep-outputs = true
-      NIX_EXTRA_CONFIG_ACT: |
+      CI_NIX_CONFIG_ACT: |
         sandbox = false
         filter-syscalls = false
 
@@ -168,8 +168,8 @@ jobs:
           # so KVM support isn't available.
           enable_kvm: "${{ github.actor != 'nektos/act' }}"
           extra_nix_config: |
-            ${{ env.NIX_EXTRA_CONFIG }}
-            ${{ github.actor == 'nektos/act' && env.NIX_EXTRA_CONFIG_ACT || '' }}
+            ${{ env.CI_NIX_CONFIG }}
+            ${{ github.actor == 'nektos/act' && env.CI_NIX_CONFIG_ACT || '' }}
 
       - name: Cache Nix store
         if: steps.config.outputs.cache_nix_store == 'true'
