@@ -10,7 +10,11 @@ set -o errexit -o nounset -o pipefail -o xtrace
 
 [ "${CI_CONFIG+x}" ] && source "$CI_CONFIG"
 
-nix develop --ignore-environment --keep CI_CONFIG --keep CI_CLEAN "${NIX_ARGS[@]+"${NIX_ARGS[@]}"}" -f shell.nix --command ci/scripts/ci.sh
+nix_args=("${NIX_ARGS[@]+${NIX_ARGS[@]}}")
+if [[ -n "${CI_NIXPKGS_CHANNEL:-}" ]]; then
+  nix_args+=(-I "nixpkgs=channel:${CI_NIXPKGS_CHANNEL}")
+fi
+nix develop "${nix_args[@]}" --ignore-environment --keep CI_CONFIG --keep CI_CLEAN -f shell.nix --command ci/scripts/ci.sh
 
 # Create a GC root for the shell closure so the cache-nix-action save step
 # does not garbage-collect it.
