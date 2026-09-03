@@ -118,7 +118,7 @@ public:
               // e.g. by calling server_disconnect(), so the event loop can
               // exit).
               server_on_disconnect = [&] { server_connection.reset(); };
-              server_connection->onDisconnect([&] { server_on_disconnect(); });
+              server_connection->onRemoteDisconnect([&] { server_on_disconnect(); });
 
               auto client_connection = std::make_unique<Connection>(loop, kj::mv(pipe.ends[1]));
               auto client_proxy = std::make_unique<ProxyClient<messages::FooInterface>>(

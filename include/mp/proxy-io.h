@@ -465,32 +465,38 @@ public:
     //! destructors of m_impl instances owned by ProxyServer objects).
     ~Connection() noexcept(false);
 
-    //! Register synchronous cleanup function to run on event loop thread (with
-    //! access to capnp thread local variables) when disconnect() is called.
-    //! any new i/o.
-    CleanupIt addSyncCleanup(std::function<void()> fn);
-    void removeSyncCleanup(CleanupIt it);
+    //! Register a synchronous cleanup function to run on the event loop thread
+    //! (with access to capnp thread-local variables) when the connection is
+    //! disconnected -- for either a remote disconnect (the peer closes the
+    //! connection) or a local one (the connection is torn down on this side).
+    //! Contrast onRemoteDisconnect(), whose handler runs only on a remote
+    //! disconnect. Returns a handle that can be passed to cancelOnDisconnect()
+    //! to unregister the function before it runs.
+    CleanupIt onDisconnect(std::function<void()> fn);
+    void cancelOnDisconnect(CleanupIt it);
 
-    //! Add disconnect handler.
+    //! Add a remote disconnect handler, run when the peer closes the
+    //! connection. The handler is canceled if the connection is disconnected
+    //! locally first (which destroys m_on_remote_disconnect).
     template <typename F>
-    void onDisconnect(F&& f)
+    void onRemoteDisconnect(F&& f)
     {
-        // Add disconnect handler to local TaskSet to ensure it is canceled and
-        // will never run after connection object is destroyed. But when disconnect
+        // Add the handler to the local TaskSet to ensure it is canceled and
+        // will never run after the connection object is destroyed. But when the
         // handler fires, do not call the function f right away, instead add it
         // to the EventLoop TaskSet to avoid "Promise callback destroyed itself"
         // error in the typical case where f deletes this Connection object.
-        m_on_disconnect.add(m_network.onDisconnect().then(
+        m_on_remote_disconnect.add(m_network.onDisconnect().then(
             [f = std::forward<F>(f), this]() mutable { m_loop->m_task_set->add(kj::evalLater(kj::mv(f))); }));
     }
 
     EventLoopRef m_loop;
     kj::Own<kj::AsyncIoStream> m_stream;
     LoggingErrorHandler m_error_handler{*m_loop};
-    //! TaskSet used to cancel the m_network.onDisconnect() handler for remote
-    //! disconnections, if the connection is closed locally first by deleting
-    //! this Connection object.
-    kj::TaskSet m_on_disconnect{m_error_handler};
+    //! TaskSet holding the m_network.onDisconnect() handler for remote
+    //! disconnections. Reset to cancel the handler if the connection is closed
+    //! locally first by deleting this Connection object.
+    kj::TaskSet m_on_remote_disconnect{m_error_handler};
     ::capnp::TwoPartyVatNetwork m_network;
     std::optional<::capnp::RpcSystem<::capnp::rpc::twoparty::VatId>> m_rpc_system;
 
@@ -545,7 +551,7 @@ ProxyClientBase<Interface, Impl>::ProxyClientBase(typename Interface::Client cli
 {
     MP_LOG(*m_context.loop, Log::Debug) << "Creating " << CxxTypeName(*this) << " " << this;
     // Handler for the connection getting destroyed before this client object.
-    auto disconnect_cb = m_context.connection->addSyncCleanup([this]() {
+    auto disconnect_cb = m_context.connection->onDisconnect([this]() {
         // Release client capability by move-assigning to temporary.
         {
             typename Interface::Client(std::move(m_client));
@@ -583,10 +589,10 @@ ProxyClientBase<Interface, Impl>::ProxyClientBase(typename Interface::Client cli
             // Remove disconnect callback on cleanup so it doesn't run and try
             // to access this object after it's destroyed. This call needs to
             // run inside loop->sync() on the event loop thread because
-            // otherwise, if there were an ill-timed disconnect, the
-            // onDisconnect handler could fire and delete the Connection object
-            // before the removeSyncCleanup call.
-            if (m_context.connection) m_context.connection->removeSyncCleanup(disconnect_cb);
+            // otherwise, if there were an ill-timed disconnect, the remote
+            // disconnect handler could fire and delete the Connection object
+            // before the cancelOnDisconnect call.
+            if (m_context.connection) m_context.connection->cancelOnDisconnect(disconnect_cb);
 
             // Release client capability by move-assigning to temporary.
             {
@@ -615,7 +621,7 @@ ProxyClientBase<Interface, Impl>::ProxyClientBase(typename Interface::Client cli
         m_context.loop->sync([&] {
             EventLoop& loop = *m_context.loop;
             Connection* connection = m_context.connection;
-            connection->onDisconnect([&loop, connection] {
+            connection->onRemoteDisconnect([&loop, connection] {
                 MP_LOG(loop, Log::Warning) << "IPC client: unexpected network disconnect.";
                 delete connection;
             });
@@ -893,7 +899,7 @@ void _Serve(EventLoop& loop, kj::Own<kj::AsyncIoStream>&& stream, InitImpl& init
     auto it = loop.m_incoming_connections.begin();
     MP_LOG(loop, Log::Info) << "IPC server: socket connected.";
     if (loop.testing_hook_connected) loop.testing_hook_connected();
-    it->onDisconnect([&loop, it, on_disconnect = std::forward<OnDisconnect>(on_disconnect)]() mutable {
+    it->onRemoteDisconnect([&loop, it, on_disconnect = std::forward<OnDisconnect>(on_disconnect)]() mutable {
         MP_LOG(loop, Log::Info) << "IPC server: socket disconnected.";
         loop.m_incoming_connections.erase(it);
         on_disconnect();

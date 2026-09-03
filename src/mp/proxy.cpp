@@ -208,7 +208,7 @@ Connection::~Connection() noexcept(false)
     }
 }
 
-CleanupIt Connection::addSyncCleanup(std::function<void()> fn)
+CleanupIt Connection::onDisconnect(std::function<void()> fn)
 {
     const Lock lock(m_loop->m_mutex);
     // Add cleanup callbacks to the front of list, so sync cleanup functions run
@@ -222,7 +222,7 @@ CleanupIt Connection::addSyncCleanup(std::function<void()> fn)
     return m_sync_cleanup_fns.emplace(m_sync_cleanup_fns.begin(), std::move(fn));
 }
 
-void Connection::removeSyncCleanup(CleanupIt it)
+void Connection::cancelOnDisconnect(CleanupIt it)
 {
     // Require cleanup functions to be removed on the event loop thread to avoid
     // needing to deal with them being removed in the middle of a disconnect.
@@ -394,7 +394,7 @@ std::tuple<ConnThread, bool> SetThread(GuardedRef<ConnThreads> threads, Connecti
     }
     if (inserted) {
         thread->second.emplace(make_thread(), connection, /* destroy_connection= */ false);
-        thread->second->m_disconnect_cb = connection->addSyncCleanup([threads, thread] {
+        thread->second->m_disconnect_cb = connection->onDisconnect([threads, thread] {
             // Note: it is safe to use the `thread` iterator in this cleanup
             // function, because the iterator would only be invalid if the map entry
             // was removed, and if the map entry is removed the ProxyClient<Thread>
@@ -425,7 +425,7 @@ ProxyClient<Thread>::~ProxyClient()
         // handler attempting to call it.
         m_context.loop->sync([&]() {
             if (m_disconnect_cb) {
-                m_context.connection->removeSyncCleanup(*m_disconnect_cb);
+                m_context.connection->cancelOnDisconnect(*m_disconnect_cb);
             }
         });
     }
