@@ -137,11 +137,11 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      NIXPKGS_CHANNEL: nixos-26.05
-      NIX_EXTRA_CONFIG: |
+      CI_NIXPKGS_CHANNEL: nixos-26.05
+      CI_NIX_CONFIG: |
         keep-env-derivations = true
         keep-outputs = true
-      NIX_EXTRA_CONFIG_ACT: |
+      CI_NIX_CONFIG_ACT: |
         sandbox = false
         filter-syscalls = false
 
@@ -164,13 +164,12 @@ jobs:
       - name: Install Nix
         uses: cachix/install-nix-action@v31       # 2025-05-27, from https://github.com/cachix/install-nix-action/tags
         with:
-          nix_path: nixpkgs=https://github.com/NixOS/nixpkgs/archive/${{ steps.config.outputs.nixpkgs_rev }}.tar.gz
           # Act executes inside an unprivileged container (Docker or Podman),
           # so KVM support isn't available.
           enable_kvm: "${{ github.actor != 'nektos/act' }}"
           extra_nix_config: |
-            ${{ env.NIX_EXTRA_CONFIG }}
-            ${{ github.actor == 'nektos/act' && env.NIX_EXTRA_CONFIG_ACT || '' }}
+            ${{ env.CI_NIX_CONFIG }}
+            ${{ github.actor == 'nektos/act' && env.CI_NIX_CONFIG_ACT || '' }}
 
       - name: Cache Nix store
         if: steps.config.outputs.cache_nix_store == 'true'
