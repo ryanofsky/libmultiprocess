@@ -56,6 +56,7 @@ let
   cmakeHashes = {
     "3.12.4" = "sha256-UlVYS/0EPrcXViz/iULUcvHA5GecSUHYS6raqbKOMZQ=";
     "4.1.1" = "sha256-sp9vGXM6oiS3djUHoQikJ+1Ixojh+vIrKcROHDBUkoI=";
+    "4.3.4" = "sha256-/e/4l7nrSddkU58rHtxut+FEDfMlZ4qXwZeEmekxrdo=";
   };
   gcc = if gccVersion == null then null else builtins.getAttr ("gcc" + gccVersion) pkgs;
   cmakeBuild = if cmakeVersion == null then pkgs.cmake else (pkgs.cmake.overrideAttrs (old: {
