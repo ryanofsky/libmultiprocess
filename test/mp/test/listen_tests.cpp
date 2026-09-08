@@ -16,6 +16,7 @@
 #include <kj/async.h>
 #include <kj/common.h>
 #include <kj/debug.h>
+#include <kj/function.h>
 #include <kj/memory.h>
 #include <kj/test.h>
 #include <memory>

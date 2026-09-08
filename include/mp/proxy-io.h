@@ -234,8 +234,8 @@ Stream MakeStream(EventLoop&loop, SocketId socket);
 //! assumes it will only be accessed from one thread. So all this code needs to
 //! actually run on one thread, and the EventLoop::loop() method is the entry point for
 //! this thread. ProxyClient and ProxyServer objects that use other threads and
-//! need to perform I/O operations post to this thread using EventLoop::post()
-//! and EventLoop::sync() methods.
+//! need to perform I/O operations post to this thread using the
+//! EventLoop::sync() method.
 //!
 //! Specifically, because ProxyClient methods can be called from arbitrary
 //! threads, and ProxyServer methods can run on arbitrary threads, ProxyClient
@@ -268,16 +268,7 @@ public:
 
     //! Run function on event loop thread. Does not return until function completes.
     //! Must be called while the loop() function is active.
-    void post(kj::Function<void()> fn);
-
-    //! Wrapper around EventLoop::post that takes advantage of the
-    //! fact that callable will not go out of scope to avoid requirement that it
-    //! be copyable.
-    template <typename Callable>
-    void sync(Callable&& callable)
-    {
-        post(std::forward<Callable>(callable));
-    }
+    void sync(kj::FunctionParam<void()> fn);
 
     //! Register cleanup function to run on asynchronous worker thread without
     //! blocking the event loop thread.
@@ -310,8 +301,8 @@ public:
     //! method has not been called.
     std::thread m_async_thread;
 
-    //! Callback function to run on event loop thread during post() or sync() call.
-    kj::Function<void()>* m_post_fn MP_GUARDED_BY(m_mutex) = nullptr;
+    //! Callback function to run on event loop thread during sync() call.
+    kj::FunctionParam<void()>* m_sync_fn MP_GUARDED_BY(m_mutex) = nullptr;
 
     //! Callback functions to run on async thread.
     std::optional<CleanupList> m_async_fns MP_GUARDED_BY(m_mutex);

@@ -275,7 +275,7 @@ EventLoop::~EventLoop()
 {
     if (m_async_thread.joinable()) m_async_thread.join();
     const Lock lock(m_mutex);
-    KJ_ASSERT(m_post_fn == nullptr);
+    KJ_ASSERT(m_sync_fn == nullptr);
     KJ_ASSERT(!m_async_fns);
     KJ_ASSERT(!m_wait_stream);
     KJ_ASSERT(!m_post_stream);
@@ -304,18 +304,18 @@ void EventLoop::loop()
         const size_t read_bytes = wait_stream->read(&buffer, 0, 1).wait(m_io_context.waitScope);
         if (read_bytes != 1) throw std::logic_error("EventLoop wait_stream closed unexpectedly");
         Lock lock(m_mutex);
-        if (m_post_fn) {
-            // m_post_fn throwing is never expected. If it does happen, the caller
-            // of EventLoop::post() will return without any indication of failure,
+        if (m_sync_fn) {
+            // m_sync_fn throwing is never expected. If it does happen, the caller
+            // of EventLoop::sync() will return without any indication of failure,
             // which will likely cause other bugs. Log the error and continue.
-            KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() MP_REQUIRES(m_mutex) { Unlock(lock, *m_post_fn); })) {
-                MP_LOG(*this, Log::Error) << "EventLoop: m_post_fn threw: " << kj::str(*exception).cStr();
+            KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() MP_REQUIRES(m_mutex) { Unlock(lock, *m_sync_fn); })) {
+                MP_LOG(*this, Log::Error) << "EventLoop: m_sync_fn threw: " << kj::str(*exception).cStr();
             }
-            m_post_fn = nullptr;
+            m_sync_fn = nullptr;
             m_cv.notify_all();
         } else if (done()) {
-            // Intentionally do not break if m_post_fn was set, even if done()
-            // would return true, to ensure that the post() m_post_writer->write()
+            // Intentionally do not break if m_sync_fn was set, even if done()
+            // would return true, to ensure that the sync() m_post_writer->write()
             // call always succeeds and the loop does not exit between the time
             // that the done condition is set and the write call is made.
             break;
@@ -333,7 +333,7 @@ void EventLoop::loop()
     m_cv.notify_all();
 }
 
-void EventLoop::post(kj::Function<void()> fn)
+void EventLoop::sync(kj::FunctionParam<void()> fn)
 {
     if (std::this_thread::get_id() == m_thread_id) {
         fn();
@@ -341,13 +341,13 @@ void EventLoop::post(kj::Function<void()> fn)
     }
     Lock lock(m_mutex);
     EventLoopRef ref(*this, &lock);
-    m_cv.wait(lock.m_lock, [this]() MP_REQUIRES(m_mutex) { return m_post_fn == nullptr; });
-    m_post_fn = &fn;
+    m_cv.wait(lock.m_lock, [this]() MP_REQUIRES(m_mutex) { return m_sync_fn == nullptr; });
+    m_sync_fn = &fn;
     Unlock(lock, [&] {
         char buffer = 0;
         m_post_writer->write(&buffer, 1);
     });
-    m_cv.wait(lock.m_lock, [this, &fn]() MP_REQUIRES(m_mutex) { return m_post_fn != &fn; });
+    m_cv.wait(lock.m_lock, [this, &fn]() MP_REQUIRES(m_mutex) { return m_sync_fn != &fn; });
 }
 
 void EventLoop::startAsyncThread()

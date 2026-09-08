@@ -21,6 +21,7 @@
 #include <kj/common.h>
 #include <kj/exception.h>
 #include <kj/debug.h>
+#include <kj/function.h>
 #include <kj/memory.h>
 #include <kj/string.h>
 #include <kj/test.h>
