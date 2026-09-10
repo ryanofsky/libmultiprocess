@@ -19,7 +19,7 @@ concurrency:
 env:
   BITCOIN_REPO: bitcoin/bitcoin
   BITCOIN_CORE_REF: refs/heads/master
-  LLVM_VERSION: 22
+  LLVM_VERSION: 23
   LIBCXX_DIR: /tmp/libcxx-build/
 
 jobs:
@@ -37,13 +37,13 @@ jobs:
             functional_test_runs: 20
             nproc_multiplier: 2
             functional_timeout_factor: 40
-            runner: ubuntu-24.04
+            runner: ubuntu-26.04
             apt-llvm: true
             packages: >-
               ccache
-              clang-22
-              llvm-22
-              libclang-rt-22-dev
+              clang-23
+              llvm-23
+              libclang-rt-23-dev
               libboost-dev
               libsqlite3-dev
               libcapnp-dev
