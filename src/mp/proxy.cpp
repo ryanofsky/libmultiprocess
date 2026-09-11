@@ -88,7 +88,7 @@ void EventLoopRef::reset()
     }
 }
 
-ProxyContext::ProxyContext(Connection* connection) : connection(connection), loop{*connection->m_loop} {}
+ProxyContext::ProxyContext(Connection* connection) : connection(connection->shared_from_this()), loop{*connection->m_loop} {}
 
 Connection::~Connection() noexcept(false)
 {
@@ -115,6 +115,7 @@ Connection::Tracker Connection::disconnect()
     // from the destructor) is a no-op.
     if (!m_network) return m_server_objects;
 
+<<<<<<< HEAD
     // Unlike the destructor, leave m_alive set, so onDisconnect handlers run
     // after a local disconnect the same way they do after a remote one: on a
     // later event loop turn, they remove the connection from
@@ -125,6 +126,18 @@ Connection::Tracker Connection::disconnect()
     // that want to wait for in-flight calls to finish wait on the returned
     // tracker, which outlives the connection.
 
+||||||| parent of ef84b20 (proxy-io: manage Connection lifetime with shared_ptr)
+    // Expire m_alive before severing the connection below so onDisconnect
+    // handlers will not trigger and delete this Connection object. The
+    // onDisconnect handlers trigger on remote disconnects and automatically
+    // delete Connection objects. But on local disconnects, they should not
+    // trigger, because local code that disconnects is responsible for freeing
+    // Connection objects, and it may want to wait for in-flight calls to finish
+    // before destroying them.
+    m_alive.reset();
+
+=======
+>>>>>>> ef84b20 (proxy-io: manage Connection lifetime with shared_ptr)
     // Try to cancel any calls that may be executing.
     m_canceler.cancel("Interrupted by disconnect");
 
@@ -241,7 +254,7 @@ Connection::Tracker Connection::disconnect()
     return m_server_objects;
 }
 
-CleanupIt Connection::addSyncCleanup(std::function<void()> fn)
+CleanupIt Connection::onDisconnect(std::function<void()> fn)
 {
     const Lock lock(m_loop->m_mutex);
     // Add cleanup callbacks to the front of list, so sync cleanup functions run
@@ -256,7 +269,7 @@ CleanupIt Connection::addSyncCleanup(std::function<void()> fn)
     return m_sync_cleanup_fns.emplace(m_sync_cleanup_fns.begin(), std::move(fn));
 }
 
-void Connection::removeSyncCleanup(CleanupIt it)
+void Connection::cancelOnDisconnect(CleanupIt it)
 {
     // Require cleanup functions to be removed on the event loop thread to avoid
     // needing to deal with them being removed in the middle of a disconnect.
@@ -388,7 +401,7 @@ std::tuple<ConnThread, bool> SetThread(GuardedRef<ConnThreads> threads, Connecti
     }
     if (inserted) {
         thread->second.emplace(make_thread(), connection, /* destroy_connection= */ false);
-        thread->second->m_disconnect_cb = connection->addSyncCleanup([threads, connection] {
+        thread->second->m_disconnect_cb = connection->onDisconnect([threads, connection] {
             // Remove and destroy this connection's map entry, unless the
             // thread owning the map is exiting and ~ThreadContext already took
             // the entry, in which case that thread destroys it. Look the entry
@@ -420,6 +433,7 @@ ProxyClient<Thread>::~ProxyClient()
 
     // If thread is being destroyed before connection is destroyed, remove the
     // cleanup callback that was registered to handle the connection being
+<<<<<<< HEAD
     // destroyed before the thread being destroyed. Check and remove the
     // callback on the event loop thread with loop->sync(), so if the
     // connection is broken there is not a race between this thread trying to
@@ -437,6 +451,49 @@ ProxyClient<Thread>::~ProxyClient()
             m_context.connection->removeSyncCleanup(*m_disconnect_cb);
         }
     });
+||||||| parent of ef84b20 (proxy-io: manage Connection lifetime with shared_ptr)
+    // destroyed before the thread being destroyed.
+    if (m_disconnect_cb) {
+        // Remove disconnect callback on the event loop thread with
+        // loop->sync(), so if the connection is broken there is not a race
+        // between this thread trying to remove the callback and the disconnect
+        // handler attempting to call it.
+        m_context.loop->sync([&]() {
+            // Skip if the connection was disconnected while this thread waited
+            // for the event loop: Connection::disconnect() has already run and
+            // freed the cleanup list m_disconnect_cb points into, and the
+            // ProxyClientBase disconnect callback has nulled
+            // m_context.connection. (The SetThread callback resets
+            // m_disconnect_cb only when it finds this object in the thread
+            // map, so if ~ThreadContext took the entry first, m_disconnect_cb
+            // is still set here.)
+            if (m_disconnect_cb && m_context.connection) {
+                m_context.connection->removeSyncCleanup(*m_disconnect_cb);
+            }
+        });
+    }
+=======
+    // destroyed before the thread being destroyed.
+    if (m_disconnect_cb) {
+        // Remove disconnect callback on the event loop thread with
+        // loop->sync(), so if the connection is broken there is not a race
+        // between this thread trying to remove the callback and the disconnect
+        // handler attempting to call it.
+        m_context.loop->sync([&]() {
+            // Skip if the connection was disconnected while this thread waited
+            // for the event loop: Connection::disconnect() has already run and
+            // freed the cleanup list m_disconnect_cb points into, and the
+            // ProxyClientBase disconnect callback has nulled
+            // m_context.connection. (The SetThread callback resets
+            // m_disconnect_cb only when it finds this object in the thread
+            // map, so if ~ThreadContext took the entry first, m_disconnect_cb
+            // is still set here.)
+            if (m_disconnect_cb && m_context.connection) {
+                m_context.connection->cancelOnDisconnect(*m_disconnect_cb);
+            }
+        });
+    }
+>>>>>>> ef84b20 (proxy-io: manage Connection lifetime with shared_ptr)
 }
 
 ThreadContext::~ThreadContext()
