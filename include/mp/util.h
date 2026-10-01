@@ -316,11 +316,11 @@ using Stream = kj::Own<kj::AsyncIoStream>;
 // handles by calling the GetProcessId API.
 using ProcessId = HANDLE;
 using SocketId = SOCKET;
-constexpr SocketId SocketError{INVALID_SOCKET};
+inline constexpr SocketId SocketError{INVALID_SOCKET};
 #else
 using ProcessId = int;
 using SocketId = int;
-constexpr SocketId SocketError{-1};
+inline constexpr SocketId SocketError{-1};
 #endif
 
 //! Spawn a new process that communicates with the current process over a socket
