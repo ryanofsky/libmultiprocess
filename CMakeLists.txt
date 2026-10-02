@@ -99,7 +99,9 @@ if(MP_ENABLE_IWYU)
   # Pass -w so CXXFLAGS meant for the compiler (-Werror -Wpedantic, GCC-only -W
   # options) do not turn clang warnings into errors in the IWYU pass. Clang
   # stops after 19 errors, and IWYU then exits nonzero without checking includes.
-  set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE "${IWYU_EXECUTABLE};-Xiwyu;--error;-w")
+  # Run IWYU through a wrapper so its diagnostics are shown when it fails
+  # without suggesting includes (see cmake/iwyu-wrapper.sh).
+  set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE "${CMAKE_CURRENT_SOURCE_DIR}/cmake/iwyu-wrapper.sh;${IWYU_EXECUTABLE};-Xiwyu;--error;-w")
   if(DEFINED ENV{IWYU_MAPPING_FILE})
     list(APPEND CMAKE_CXX_INCLUDE_WHAT_YOU_USE "-Xiwyu" "--mapping_file=$ENV{IWYU_MAPPING_FILE}")
   endif()
