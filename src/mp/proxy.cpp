@@ -27,7 +27,12 @@
 #include <kj/memory.h>
 #include <kj/string.h>
 #include <cstdint>
+<<<<<<< HEAD
 #include <cstring>
+||||||| parent of 51ec73e (proxy: Rethrow EventLoop::sync() callback exceptions in the calling thread)
+=======
+#include <exception>
+>>>>>>> 51ec73e (proxy: Rethrow EventLoop::sync() callback exceptions in the calling thread)
 #include <map>
 #include <memory>
 #include <optional>
@@ -270,9 +275,56 @@ void EventLoop::loop()
         m_async_fns.emplace();
     }
 
+<<<<<<< HEAD
     // Block execution here until all references are dropped
     m_stop_promise_fulfiller_pair.promise.wait(m_io_context.waitScope);
 
+||||||| parent of 51ec73e (proxy: Rethrow EventLoop::sync() callback exceptions in the calling thread)
+    kj::Own<kj::AsyncIoStream>& wait_stream{m_wait_stream};
+    char buffer = 0;
+    for (;;) {
+        const size_t read_bytes = wait_stream->read(&buffer, 0, 1).wait(m_io_context.waitScope);
+        if (read_bytes != 1) throw std::logic_error("EventLoop wait_stream closed unexpectedly");
+        Lock lock(m_mutex);
+        if (m_sync_fn) {
+            // m_sync_fn throwing is never expected. If it does happen, the caller
+            // of EventLoop::sync() will return without any indication of failure,
+            // which will likely cause other bugs. Log the error and continue.
+            KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() MP_REQUIRES(m_mutex) { Unlock(lock, *m_sync_fn); })) {
+                MP_LOG(*this, Log::Error) << "EventLoop: m_sync_fn threw: " << kj::str(*exception).cStr();
+            }
+            m_sync_fn = nullptr;
+            m_cv.notify_all();
+        } else if (done()) {
+            // Intentionally do not break if m_sync_fn was set, even if done()
+            // would return true, to ensure that the sync() m_post_writer->write()
+            // call always succeeds and the loop does not exit between the time
+            // that the done condition is set and the write call is made.
+            break;
+        }
+    }
+=======
+    kj::Own<kj::AsyncIoStream>& wait_stream{m_wait_stream};
+    char buffer = 0;
+    for (;;) {
+        const size_t read_bytes = wait_stream->read(&buffer, 0, 1).wait(m_io_context.waitScope);
+        if (read_bytes != 1) throw std::logic_error("EventLoop wait_stream closed unexpectedly");
+        Lock lock(m_mutex);
+        if (m_sync_fn) {
+            // m_sync_fn does not throw, because sync() catches exceptions from
+            // its callback and rethrows them in the calling thread.
+            Unlock(lock, *m_sync_fn);
+            m_sync_fn = nullptr;
+            m_cv.notify_all();
+        } else if (done()) {
+            // Intentionally do not break if m_sync_fn was set, even if done()
+            // would return true, to ensure that the sync() m_post_writer->write()
+            // call always succeeds and the loop does not exit between the time
+            // that the done condition is set and the write call is made.
+            break;
+        }
+    }
+>>>>>>> 51ec73e (proxy: Rethrow EventLoop::sync() callback exceptions in the calling thread)
     MP_LOG(*this, Log::Info) << "EventLoop::loop done, cancelling event listeners.";
     m_task_set.reset();
     MP_LOG(*this, Log::Info) << "EventLoop::loop bye.";
@@ -287,12 +339,47 @@ void EventLoop::sync(kj::FunctionParam<void()> fn)
         fn();
         return;
     }
+<<<<<<< HEAD
     // fn throwing is never expected. If it does happen, the caller of
     // EventLoop::sync() will return without any indication of failure, which
     // will likely cause other bugs. Log the error and continue.
     KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() { m_executor.executeSync(fn); })) {
         MP_LOG(*this, Log::Error) << "EventLoop: m_executor.executeSync threw: " << kj::str(*exception).cStr();
     }
+||||||| parent of 51ec73e (proxy: Rethrow EventLoop::sync() callback exceptions in the calling thread)
+    Lock lock(m_mutex);
+    EventLoopRef ref(*this, &lock);
+    m_cv.wait(lock.m_lock, [this]() MP_REQUIRES(m_mutex) { return m_sync_fn == nullptr; });
+    m_sync_fn = &fn;
+    Unlock(lock, [&] {
+        char buffer = 0;
+        m_post_writer->write(&buffer, 1);
+    });
+    m_cv.wait(lock.m_lock, [this, &fn]() MP_REQUIRES(m_mutex) { return m_sync_fn != &fn; });
+=======
+    // Catch any exception fn() throws on the event loop thread and rethrow it
+    // below, so callers see the same exception they would see if fn() were
+    // called directly.
+    std::exception_ptr exception;
+    auto call_fn = [&] {
+        try {
+            fn();
+        } catch (...) {
+            exception = std::current_exception();
+        }
+    };
+    kj::FunctionParam<void()> sync_fn{call_fn};
+    Lock lock(m_mutex);
+    EventLoopRef ref(*this, &lock);
+    m_cv.wait(lock.m_lock, [this]() MP_REQUIRES(m_mutex) { return m_sync_fn == nullptr; });
+    m_sync_fn = &sync_fn;
+    Unlock(lock, [&] {
+        char buffer = 0;
+        m_post_writer->write(&buffer, 1);
+    });
+    m_cv.wait(lock.m_lock, [this, &sync_fn]() MP_REQUIRES(m_mutex) { return m_sync_fn != &sync_fn; });
+    if (exception) std::rethrow_exception(exception);
+>>>>>>> 51ec73e (proxy: Rethrow EventLoop::sync() callback exceptions in the calling thread)
 }
 
 void EventLoop::startAsyncThread()
